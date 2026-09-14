@@ -35,13 +35,16 @@ public class CollectCommand implements ApplicationRunner {
 
     private final CandleCollectService collectService;
     private final CsvCandleWriter csvWriter;
+    private final CandlePersistService persistService;
     private final CollectorProperties properties;
 
     public CollectCommand(CandleCollectService collectService,
                           CsvCandleWriter csvWriter,
+                          CandlePersistService persistService,
                           CollectorProperties properties) {
         this.collectService = collectService;
         this.csvWriter = csvWriter;
+        this.persistService = persistService;
         this.properties = properties;
     }
 
@@ -53,18 +56,27 @@ public class CollectCommand implements ApplicationRunner {
         int maxBars = Integer.parseInt(option(args, "max-bars", "100000"));
         boolean adjusted = Boolean.parseBoolean(option(args, "adjusted", "true"));
         Path csvDir = Path.of(option(args, "csv-dir", properties.csvDir()));
+        String target = option(args, "target", properties.target());
+        boolean toCsv = target.contains("csv") || target.contains("both");
+        boolean toDb = target.contains("db") || target.contains("both");
+        if (!toCsv && !toDb) {
+            throw new IllegalArgumentException("--target 은 db | csv | both 중 하나입니다: " + target);
+        }
 
-        log.info("수집 시작 — 종목 {}, 단위 {}, from {}, 상한 {}봉, 수정주가 {}",
-                symbols, interval.code(), from, maxBars, adjusted);
+        log.info("수집 시작 — 종목 {}, 단위 {}, from {}, 상한 {}봉, 수정주가 {}, 적재 대상 {}",
+                symbols, interval.code(), from, maxBars, adjusted, target);
 
         int totalBars = 0;
+        int totalRows = 0;
         int failed = 0;
         for (String symbol : symbols) {
             try {
                 CandleCollectService.CollectResult result =
                         collectService.collect(symbol, interval, from, maxBars, adjusted);
-                Path file = csvWriter.write(symbol, interval, result.candles(), csvDir);
+                Path file = toCsv ? csvWriter.write(symbol, interval, result.candles(), csvDir) : null;
+                int rows = toDb ? persistService.persist(symbol, interval, result.candles()) : 0;
                 totalBars += result.candles().size();
+                totalRows += rows;
                 log.info("""
                         
                         ── {} {} ──────────────────────────────
@@ -73,7 +85,8 @@ public class CollectCommand implements ApplicationRunner {
                           요청 수    : {}
                           소요       : {}초
                           종료 사유  : {}
-                          CSV        : {}""",
+                          CSV        : {}
+                          DB 적재    : {}행""",
                         symbol, interval.code(),
                         result.candles().size(),
                         result.oldest() == null ? "-" : result.oldest().timestamp(),
@@ -81,13 +94,15 @@ public class CollectCommand implements ApplicationRunner {
                         result.requests(),
                         result.elapsed().toSeconds(),
                         result.stopReason(),
-                        file.toAbsolutePath());
+                        file == null ? "(생략)" : file.toAbsolutePath(),
+                        toDb ? rows : "(생략)");
             } catch (RuntimeException e) {
                 failed++;
                 log.error("{} {} 수집 실패: {}", symbol, interval.code(), e.getMessage());
             }
         }
-        log.info("수집 종료 — 종목 {}개, 총 {}봉, 실패 {}건", symbols.size(), totalBars, failed);
+        log.info("수집 종료 — 종목 {}개, 총 {}봉, DB {}행, 실패 {}건",
+                symbols.size(), totalBars, totalRows, failed);
     }
 
     private static List<String> symbols(ApplicationArguments args) {

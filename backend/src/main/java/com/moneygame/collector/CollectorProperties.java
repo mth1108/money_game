@@ -9,5 +9,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * 요청 사이에 대기를 둔다. 실측상 300ms 면 잔량이 19/20 로 유지된다 (CLAUDE.md §3 M1).
  */
 @ConfigurationProperties(prefix = "collector")
-public record CollectorProperties(long requestDelayMs, int maxRetries, String csvDir) {
+public record CollectorProperties(long requestDelayMs,
+                                  int maxRetries,
+                                  String csvDir,
+                                  String target,
+                                  int batchSize) {
 }

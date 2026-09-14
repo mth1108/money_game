@@ -26,6 +26,10 @@ dependencies {
     // Jackson. 토스 API 호출 자체는 JDK 내장 HttpClient 를 쓴다 (HTTP 라이브러리 추가 없음)
     implementation 'org.springframework.boot:spring-boot-starter-json'
 
+    // 조회는 JPA, 시세 적재는 건수가 많아 JdbcTemplate 배치 insert 로 처리한다 (§5)
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 

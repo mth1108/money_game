@@ -3,9 +3,17 @@ spring:
     name: moneygame
   config:
     # API 키와 DB 접속 정보. .gitignore 대상이라 없을 수도 있다.
+    #   toss.api.client-id / client-secret
+    #   spring.datasource.url / username / password
+    #     url 에 rewriteBatchedStatements=true 를 넣어야 배치 insert 가 실제로 묶여 나간다
     import: optional:classpath:application-local.yml
   main:
     banner-mode: off
+  jpa:
+    hibernate:
+      # update 금지 (CLAUDE.md §5). DDL 원본은 db/schema.sql 이고 손으로 적용한다
+      ddl-auto: validate
+    open-in-view: false
 
 toss:
   api:
@@ -17,6 +25,10 @@ collector:
   request-delay-ms: 300
   max-retries: 8
   csv-dir: ../data/samples
+  # 적재 대상 db | csv | both. --target 으로 바꿀 수 있다
+  target: db
+  # 배치 insert 한 번에 넘길 행 수
+  batch-size: 1000
 
 logging:
   level:
