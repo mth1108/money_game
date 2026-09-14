@@ -77,6 +77,69 @@ GET    /api/v1/stocks                        종목 기본 정보 (결과 화면
 - DB 컬럼은 `DECIMAL`
 - 수량은 정수
 
+**수량과 증거금 — 정수 수량, 증거금 역산**
+
+```
+quantity      = floor( (margin x leverage) / entryPrice )
+actualMargin  = (quantity x entryPrice) / leverage
+cash         -= actualMargin + fee
+```
+
+- 사용자가 입력한 `margin` 은 **상한**입니다. 실제 차감액은 체결 수량에서 역산합니다
+- 잔돈을 돌려주는 것이 아니라 **애초에 그만큼만 씁니다**
+- 이유: `actualMargin x leverage == quantity x entryPrice` 가 정확히 성립해야
+  청산가 계산에 오차가 생기지 않습니다. 잔돈 반환 방식은 margin 과 실제 포지션
+  크기가 어긋난 채 남아 청산 계산이 틀어집니다
+- `quantity == 0` 이면 주문 거부. 사유는 「증거금 부족」
+
+**scale 과 RoundingMode**
+
+| 대상 | scale | RoundingMode | 이유 |
+|---|---|---|---|
+| 중간 계산 | 8 | `HALF_UP` | 나눗셈은 전부 `divide(x, 8, HALF_UP)` |
+| 최종 가격 | 4 | 용도별 | 최종 단계에서만 적용 |
+| 청산가 | 4 | `DOWN` | 내림 → 늦게 청산 → 플레이어에 유리 |
+| 수수료 | 4 | `UP` | 올림 → 잔고 음수 방지 |
+
+- **중간마다 반올림하지 않습니다.** 최종 단계에서만 적용합니다
+- 원칙: **애매하면 플레이어에게 유리하게, 단 잔고는 보수적으로**
+- ⚠️ **이 원칙은 반올림 방향처럼 플레이어가 통제할 수 없는 계산 오차에만 적용합니다.**
+  게임 규칙 자체에는 적용하지 않습니다. 규칙에 적용하면 특정 플레이 방식에 보너스를
+  주게 되고, 그러면 게임이 요구하는 의사결정 자체가 사라집니다
+
+**수수료 정책**
+
+```
+진입 1회 + 종료 1회. 종료 사유는 불문한다.
+```
+
+| 시점 | 수수료 | 기준가 |
+|---|---|---|
+| 진입 (매수) | 부과 | 진입가 |
+| 정상 청산 (매도) | 부과 | 매도 시점 현재가 |
+| 강제 청산 (liquidation) | 부과 | 청산된 틱의 현재가 |
+| 판 종료 시 정리 | 부과 | 마지막 틱의 현재가 |
+
+- **면제 구간을 두지 않습니다.** 종료 정리만 면제하면 239틱에 파는 쪽이 수수료를
+  더 내게 되어, 합리적인 플레이어는 절대 손절하지 않게 됩니다. 배율과 청산을 넣은
+  목적이 「팔지 말지 고민하게 만드는 것」인데 그 고민 자체가 사라집니다
+- 싱글 모드 상대인 존버 봇(M9 `HoldBot`)이 구조적으로 유리해지는 것도 같은 원인입니다
+
+**청산 판정**
+
+```
+현재가 <= liquidationPrice  →  청산   (등호 포함)
+```
+
+**경계값 테스트 (필수)**
+
+배율 3(`1/3` 이 무한소수)으로 반드시 케이스를 만듭니다.
+배율 2로만 테스트하면 이 문제를 잡지 못합니다.
+
+- `liquidationPrice + 0.0001` → 생존
+- `liquidationPrice`          → 청산
+- `liquidationPrice - 0.0001` → 청산
+
 ### 1.6 동시성
 
 - **한 방(room)의 상태 변경은 반드시 직렬로** 처리합니다
@@ -424,23 +487,30 @@ PlayerState
 **계산 규칙 (전부 조정 가능한 값)**
 
 ```
-진입
-  quantity          = (margin × leverage) / entryPrice
-  liquidationPrice  = entryPrice × (1 − 1/leverage)
-  cash             -= margin + 수수료
-  수수료             = margin × leverage × FEE_RATE      (FEE_RATE 기본 0.0015)
+진입                                          (반올림 규칙은 §1.5)
+  quantity          = floor( (margin × leverage) / entryPrice )
+  actualMargin      = (quantity × entryPrice) / leverage
+  liquidationPrice  = entryPrice × (1 − 1/leverage)     scale 4, DOWN
+  수수료             = quantity × entryPrice × FEE_RATE   scale 4, UP
+  cash             -= actualMargin + 수수료
+                                              (FEE_RATE 기본 0.0015)
 
 평가
   미실현손익  = (현재가 − entryPrice) × quantity
-  포지션가치  = margin + 미실현손익
+  포지션가치  = actualMargin + 미실현손익
   총자산      = cash + Σ 포지션가치
 
 정상 청산(매도)
-  cash += margin + 미실현손익 − 수수료
+  cash += actualMargin + 미실현손익 − 수수료
+  수수료 = quantity × 현재가 × FEE_RATE                   scale 4, UP
 
 강제 청산
-  현재가 ≤ liquidationPrice 이면 포지션 제거
-  cash 증가 없음 (margin 전액 소멸)
+  현재가 ≤ liquidationPrice 이면 포지션 제거 (등호 포함)
+  actualMargin 전액 소멸
+  cash -= 수수료                                          ← 사유 불문 1회 (§1.5)
+
+판 종료 시 정리
+  정상 청산(매도)과 똑같이 처리한다. 면제하지 않는다 (§1.5 수수료 정책)
 ```
 
 **배율 상한**
@@ -451,7 +521,8 @@ PlayerState
 | 분봉 | 1, 3, 5, 10 |
 
 **주문 거부 조건**
-- `cash < margin + 수수료`
+- `cash < actualMargin + 수수료`
+- `quantity == 0` (증거금이 1주 값에 못 미침) — 사유는 「증거금 부족」
 - 배율이 해당 모드의 허용 목록에 없음
 - 같은 종목에 이미 포지션 보유 (1차 구현: 종목당 포지션 1개로 제한)
 - `margin ≤ 0`

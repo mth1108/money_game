@@ -1,0 +1,36 @@
+// M4/M5 단계 최소 구성.
+// Spring Boot 의존성은 S3(M6·M7)에서 추가한다 — engine/ 과 position/ 은
+// Spring 과 JPA 를 참조하지 않는다 (CLAUDE.md §2.2).
+plugins {
+    id 'java'
+}
+
+group = 'com.moneygame'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.14.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
