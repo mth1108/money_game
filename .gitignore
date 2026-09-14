@@ -1,0 +1,44 @@
+# ─────────────────────────────────────────────
+#  시크릿 — 절대 커밋 금지 (CLAUDE.md §1.1)
+#  토스 API 키는 실계좌 주문 권한까지 열립니다.
+# ─────────────────────────────────────────────
+application-local.yml
+application-*-local.yml
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.jks
+
+# ── 빌드 산출물 ──
+build/
+.gradle/
+out/
+bin/
+target/
+
+# ── 프론트엔드 ──
+node_modules/
+dist/
+.vite/
+coverage/
+
+# ── 로컬 시세 데이터 ──
+data/
+
+# ── IDE ──
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+
+# ── OS ──
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ── 로그 ──
+*.log
+logs/
