@@ -1,8 +1,9 @@
-// M4/M5 단계 최소 구성.
-// Spring Boot 의존성은 S3(M6·M7)에서 추가한다 — engine/ 과 position/ 은
-// Spring 과 JPA 를 참조하지 않는다 (CLAUDE.md §2.2).
+// M1 수집기 단계.
+// JPA·MySQL 은 다음 단계에서 추가한다 (DB 적재). 지금은 API -> CSV 경로만 만든다.
+// engine/ 과 position/ 은 Spring 을 import 하지 않는다 (CLAUDE.md §2.2).
 plugins {
     id 'java'
+    id 'org.springframework.boot' version '3.5.16'
 }
 
 group = 'com.moneygame'
@@ -19,9 +20,13 @@ repositories {
 }
 
 dependencies {
-    testImplementation platform('org.junit:junit-bom:5.14.4')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    implementation platform('org.springframework.boot:spring-boot-dependencies:3.5.16')
+
+    implementation 'org.springframework.boot:spring-boot-starter'
+    // Jackson. 토스 API 호출 자체는 JDK 내장 HttpClient 를 쓴다 (HTTP 라이브러리 추가 없음)
+    implementation 'org.springframework.boot:spring-boot-starter-json'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 
 tasks.named('test') {
