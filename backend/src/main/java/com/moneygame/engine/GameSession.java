@@ -117,9 +117,9 @@ public final class GameSession {
                 if (price != null && position.isLiquidatedAt(price)) {
                     // 증거금은 이미 차감돼 있다. 돌려주지 않는 것이 곧 전액 소멸이다.
                     // 수수료는 종료 사유를 불문하고 1회 부과한다 (§1.5 수수료 정책).
-                    BigDecimal fee = LiquidationRule.fee(position.quantity(), price);
                     player.removePosition(label);
-                    player.deduct(fee);
+                    BigDecimal fee = player.chargeFee(
+                            LiquidationRule.fee(position.quantity(), price));
                     player.countLiquidation();
                     liquidations.add(new TickResult.Liquidation(
                             player.userId(), label, price, position.margin(), fee));
@@ -189,10 +189,10 @@ public final class GameSession {
         }
 
         BigDecimal price = currentPrice(label);
-        BigDecimal fee = LiquidationRule.fee(position.quantity(), price);
 
         player.removePosition(label);
-        player.add(position.value(price).subtract(fee));
+        player.add(position.value(price));
+        BigDecimal fee = player.chargeFee(LiquidationRule.fee(position.quantity(), price));
         player.countTrade();
         return OrderResult.accept(label, position.quantity(), price, position.margin(), fee);
     }
@@ -214,8 +214,8 @@ public final class GameSession {
                 Position position = player.removePosition(label);
                 BigDecimal price = prices.get(label);
                 if (price != null) {
-                    player.add(position.value(price)
-                            .subtract(LiquidationRule.fee(position.quantity(), price)));
+                    player.add(position.value(price));
+                    player.chargeFee(LiquidationRule.fee(position.quantity(), price));
                 }
             }
         }

@@ -370,6 +370,109 @@ class GameSessionTest {
         }
     }
 
+    @Nested
+    @DisplayName("잔고 불변식 — cash 는 어떤 경로로도 음수가 되지 않는다")
+    class 잔고불변식 {
+
+        /** 시드 100만, 진입가 10000, 배율 3 에서 현금을 거의 다 태우는 주문. */
+        private static final String 풀베팅 = "995000";
+
+        @Test
+        void 풀베팅_후_즉시_청산되어도_현금은_0이_된다() {
+            // qty 298, actualMargin 993333.33333333, fee 4470 -> 잔여 현금 2196.66666667
+            // 청산 수수료 원래값 2980.0001 은 잔여 현금보다 크다 -> 잔여 현금까지만 부과
+            List<BigDecimal> series = new ArrayList<>(List.of(bd("10000"), bd("6666.6667")));
+            GameSession s = session(series, 1);
+            s.addPlayer("u1", "풀베팅");
+            s.addPlayer("u2", "관망");
+            s.start();
+            assertTrue(s.submitOrder(OrderRequest.buy("u1", "A", bd(풀베팅), 3)).accepted());
+            BigDecimal cashBefore = s.player("u1").cash();
+            assertEquals(0, bd("2196.66666667").compareTo(cashBefore));
+
+            TickResult t = s.tick();
+
+            assertEquals(1, t.liquidations().size());
+            assertEquals(0, cashBefore.compareTo(t.liquidations().get(0).fee()),
+                    "부과된 수수료는 잔여 현금을 넘지 않는다");
+            assertEquals(0, s.player("u1").cash().signum(), "현금은 정확히 0 이 된다");
+            assertTrue(s.player("u1").cash().signum() >= 0);
+        }
+
+        @Test
+        void 여러_포지션이_같은_틱에_청산돼도_현금은_음수가_되지_않는다() {
+            List<BigDecimal> a = new ArrayList<>(List.of(bd("10000"), bd("6666.6667")));
+            List<BigDecimal> b = new ArrayList<>(List.of(bd("10000"), bd("6666.6667")));
+            GameSession s = new GameSession(List.of("A", "B"), Map.of("A", a, "B", b),
+                    SEED, LEVERAGES, 1);
+            s.addPlayer("u1", "양쪽풀베팅");
+            s.start();
+            // 각각 qty 149, 비용 498901.66666667 -> 두 번이면 잔여 현금 2196.66666666
+            assertTrue(s.submitOrder(OrderRequest.buy("u1", "A", bd("499000"), 3)).accepted());
+            assertTrue(s.submitOrder(OrderRequest.buy("u1", "B", bd("499000"), 3)).accepted());
+            assertEquals(2, s.player("u1").positions().size());
+
+            TickResult t = s.tick();
+
+            assertEquals(2, t.liquidations().size());
+            assertEquals(2, s.player("u1").liquidatedCount());
+            // 청산 수수료 합(2980.0002)이 잔여 현금(2196.66666666)보다 크다
+            assertEquals(0, s.player("u1").cash().signum(), "두 번째 청산에서 잔여분까지만 부과된다");
+            assertTrue(s.player("u1").cash().signum() >= 0);
+        }
+
+        @Test
+        void 종료정리_수수료로도_현금이_음수가_되지_않는다() {
+            // 청산가(6666.6667)보다 0.0001 높아 살아남지만 포지션가치가 거의 0 인 상태.
+            // 정리 수수료 2980.0001 은 현금 + 포지션가치보다 크다.
+            List<BigDecimal> series = new ArrayList<>(List.of(bd("10000"), bd("6666.6668")));
+            GameSession s = session(series, 1);
+            s.addPlayer("u1", "풀베팅");
+            s.start();
+            assertTrue(s.submitOrder(OrderRequest.buy("u1", "A", bd(풀베팅), 3)).accepted());
+
+            TickResult t = s.tick();
+            assertTrue(t.liquidations().isEmpty(), "이 가격에서는 살아남아야 한다");
+
+            GameResult r = s.finish();
+
+            assertEquals(0, s.player("u1").cash().signum());
+            assertEquals(0, r.rankings().get(0).totalAsset().signum());
+        }
+
+        @Test
+        void 수익률은_마이너스_100퍼센트_밑으로_내려가지_않는다() {
+            List<BigDecimal> series = new ArrayList<>(List.of(bd("10000"), bd("6666.6667")));
+            GameSession s = session(series, 1);
+            s.addPlayer("u1", "풀베팅");
+            s.start();
+            s.submitOrder(OrderRequest.buy("u1", "A", bd(풀베팅), 3));
+            s.tick();
+
+            GameResult r = s.finish();
+
+            assertEquals(0, bd("-1").compareTo(r.rankings().get(0).returnRate()),
+                    "총자산 0 이면 수익률은 정확히 -100%% 다");
+            assertTrue(r.rankings().get(0).returnRate().compareTo(bd("-1")) >= 0);
+        }
+
+        @Test
+        void 매도_수수료도_잔여_현금을_넘지_않는다() {
+            List<BigDecimal> series = new ArrayList<>(List.of(bd("10000"), bd("6666.6668")));
+            GameSession s = session(series, 1);
+            s.addPlayer("u1", "풀베팅");
+            s.start();
+            s.submitOrder(OrderRequest.buy("u1", "A", bd(풀베팅), 3));
+            s.tick();
+
+            OrderResult sell = s.submitOrder(OrderRequest.sell("u1", "A"));
+
+            assertTrue(sell.accepted());
+            assertEquals(0, s.player("u1").cash().signum());
+            assertTrue(s.player("u1").cash().signum() >= 0);
+        }
+    }
+
     @Test
     void 수수료율은_M5_규칙에서_가져온다() {
         assertEquals(0, new BigDecimal("0.0015").compareTo(LiquidationRule.FEE_RATE));

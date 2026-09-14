@@ -45,6 +45,27 @@ public final class PlayerState {
         cash = cash.subtract(amount);
     }
 
+    /**
+     * 수수료를 부과하되 잔여 현금을 넘기지 않는다. 실제로 부과된 금액을 돌려준다.
+     *
+     * 증거금 전액 소멸이 이미 최대 페널티다. 그 위에 더 빼면 페널티 강화가 아니라
+     * 계산의 부산물로 총자산이 음수가 되고, 「청산돼도 나머지 현금은 살아 있다」는
+     * 증거금 격리가 깨진다 (CLAUDE.md §3 M5).
+     *
+     * cash >= 0 불변식은 여기서 지킨다.
+     */
+    public BigDecimal chargeFee(BigDecimal fee) {
+        if (fee == null || fee.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal charged = fee.min(cash);
+        if (charged.signum() < 0) {
+            charged = BigDecimal.ZERO;
+        }
+        cash = cash.subtract(charged);
+        return charged;
+    }
+
     public void add(BigDecimal amount) {
         cash = cash.add(amount);
     }
