@@ -40,3 +40,13 @@ marketdata:
 logging:
   level:
     com.moneygame: INFO
+
+---
+# 배치형 실행 — 시세 수집(collector), 시나리오 관리(scenario).
+# 작업이 끝나면 종료해야 한다. web 의존성이 들어와도 웹 서버를 띄우지 않는다 (§2.3)
+spring:
+  config:
+    activate:
+      on-profile: collector | scenario
+  main:
+    web-application-type: none
