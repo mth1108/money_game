@@ -2,8 +2,10 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { api } from '../api/client'
 import type { User } from '../api/types'
+import { GameEnd } from '../components/GameEnd'
 import { GamePanel } from '../components/GamePanel'
 import { OrderForm } from '../components/OrderForm'
+import { Ranking } from '../components/Ranking'
 import { connectGame, type GameSocket, type SocketStatus } from '../socket/gameSocket'
 import type { ClientMessage } from '../socket/messages'
 import { initialRoomState, roomReducer } from '../socket/roomReducer'
@@ -66,8 +68,10 @@ export function Room({ user, roomId, onExit }: { user: User; roomId: string; onE
 
       {state.game && (
         <>
+          {state.end && <GameEnd resultId={state.end.resultId} rankings={state.end.rankings} />}
           <GamePanel game={state.game} tick={state.tick} me={state.me} />
           {room?.status === 'PLAYING' && <OrderForm game={state.game} lastOrder={state.lastOrder} onSend={send} />}
+          <Ranking ranking={state.ranking} tickIndex={state.rankingTick} myUserId={String(user.id)} />
         </>
       )}
 
