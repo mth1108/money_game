@@ -1,5 +1,5 @@
-// M1 수집기 단계.
-// JPA·MySQL 은 다음 단계에서 추가한다 (DB 적재). 지금은 API -> CSV 경로만 만든다.
+// 머니게임 백엔드. 하나의 애플리케이션을 프로파일로 나눠 실행한다 (CLAUDE.md §2.3).
+// 새 의존성은 추가 전에 확인을 구한다 (§1.7).
 // engine/ 과 position/ 은 Spring 을 import 하지 않는다 (CLAUDE.md §2.2).
 plugins {
     id 'java'
@@ -29,6 +29,9 @@ dependencies {
     // 조회는 JPA, 시세 적재는 건수가 많아 JdbcTemplate 배치 insert 로 처리한다 (§5)
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'com.mysql:mysql-connector-j'
+
+    // M6 방 관리 REST. 2026-09-25 승인 (§8 결정됨). collector · scenario 프로파일은 웹 서버를 띄우지 않는다
+    implementation 'org.springframework.boot:spring-boot-starter-web'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }

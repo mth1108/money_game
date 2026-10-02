@@ -37,6 +37,14 @@ marketdata:
   provider: csv
   csv-dir: ../data/samples
 
+room:
+  # 1틱 = 1초 (CLAUDE.md §7). 테스트에서만 줄인다
+  tick-millis: 1000
+  # 끝난 방을 결과 조회용으로 남겨 두는 시간 (10분). M8 이 생기면 결과는 DB 에서 읽는다
+  finished-retention-millis: 600000
+  # 요청이 방의 실행 흐름에서 처리되기를 기다리는 최대 시간
+  call-timeout-millis: 5000
+
 logging:
   level:
     com.moneygame: INFO

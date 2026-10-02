@@ -88,6 +88,23 @@ CREATE TABLE IF NOT EXISTS collect_logs (
   COLLATE = utf8mb4_0900_ai_ci;
 
 -- ────────────────────────────────────────────────────────────────
+-- 사용자
+--
+-- 닉네임 = 사용자 (2026-10-02 결정). 처음 쓰는 닉네임이면 여기 등록하고, 같은 닉네임은 같은
+-- 사용자로 봅니다. 비밀번호는 없습니다. 쓰기는 가입(닉네임 첫 사용) 순간뿐입니다 (§5).
+-- 게임 중 상태(현금·포지션)는 담지 않습니다 (§1.3).
+-- ────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS users (
+    id         BIGINT      NOT NULL AUTO_INCREMENT,
+    nickname   VARCHAR(20) NOT NULL,
+    created_at DATETIME    NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_users_nickname (nickname)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci;
+
+-- ────────────────────────────────────────────────────────────────
 -- 시나리오 (M3)
 --
 -- 한 판에 쓰는 「종목 + 기간 + 단위」 묶음입니다. 운영자가 관리 커맨드로 고른 구간만 들어갑니다.

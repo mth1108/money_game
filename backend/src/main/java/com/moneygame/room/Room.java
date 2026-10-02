@@ -1,0 +1,73 @@
+package com.moneygame.room;
+
+import com.moneygame.engine.GameResult;
+import com.moneygame.engine.GameSession;
+import com.moneygame.scenario.LoadedScenario;
+
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+
+/**
+ * 방 하나. (CLAUDE.md §3 M6)
+ *
+ * ┌─ §1.6 동시성 ──────────────────────────────────────────────────┐
+ * │ 아래 가변 상태는 이 방의 executor 스레드에서만 읽고 쓴다.          │
+ * │ 입장·준비·주문·틱이 모두 같은 단일 스레드 큐로 들어가므로            │
+ * │ 한 방의 상태 변경은 자동으로 직렬이 된다. 방 간 락은 없다.          │
+ * └──────────────────────────────────────────────────────────────┘
+ */
+final class Room {
+
+    final String id;
+    final RoomSettings settings;
+    final Instant createdAt = Instant.now();
+    final ScheduledExecutorService executor;
+
+    // ── executor 스레드 전용 ──
+    String hostUserId;
+    final Map<String, Participant> participants = new LinkedHashMap<>();
+    RoomStatus status = RoomStatus.WAITING;
+    LoadedScenario scenario;
+    GameSession session;
+    ScheduledFuture<?> ticker;
+    GameResult result;
+
+    static final class Participant {
+        final String userId;
+        final String nickname;
+        boolean ready;
+
+        Participant(String userId, String nickname) {
+            this.userId = userId;
+            this.nickname = nickname;
+        }
+    }
+
+    Room(String id, RoomSettings settings) {
+        this.id = id;
+        this.settings = settings;
+        this.executor = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "room-" + id);
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    /** executor 스레드에서만 부른다. */
+    RoomView view() {
+        List<RoomView.Participant> list = new ArrayList<>();
+        for (Participant p : participants.values()) {
+            list.add(new RoomView.Participant(p.userId, p.nickname, p.ready));
+        }
+        return new RoomView(id, status, settings.mode(), settings.maxPlayers(), hostUserId, List.copyOf(list),
+                session == null ? List.of() : session.symbolLabels(),
+                session == null ? -1 : session.tickIndex(),
+                session == null ? 0 : session.totalTicks());
+    }
+}
