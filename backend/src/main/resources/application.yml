@@ -30,6 +30,13 @@ collector:
   # 배치 insert 한 번에 넘길 행 수
   batch-size: 1000
 
+marketdata:
+  # db | csv. 운영은 db 다.
+  # ⚠️ 임시로 csv — 토스 API 를 쓸 수 없어 DB 에 시세가 없다 (CLAUDE.md §9).
+  #    DB 를 채우고 DbPriceDataProvider 를 실데이터로 검증하면 db 로 되돌린다
+  provider: csv
+  csv-dir: ../data/samples
+
 logging:
   level:
     com.moneygame: INFO

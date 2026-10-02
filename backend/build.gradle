@@ -33,8 +33,27 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 
+// 기본 test 는 순수 단위 테스트만 돈다. DB 가 없어도 통과해야 한다
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags 'integration'
+    }
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+    }
+}
+
+// 로컬 MySQL 이 필요한 통합 테스트. application-local.yml 의 접속 정보를 쓴다
+//   ./gradlew integrationTest
+tasks.register('integrationTest', Test) {
+    description = '로컬 MySQL 통합 테스트 (@Tag("integration"))'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'integration'
+    }
+    shouldRunAfter tasks.named('test')
     testLogging {
         events 'passed', 'failed', 'skipped'
     }
