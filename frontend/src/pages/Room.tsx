@@ -2,6 +2,8 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { api } from '../api/client'
 import type { User } from '../api/types'
+import { GamePanel } from '../components/GamePanel'
+import { OrderForm } from '../components/OrderForm'
 import { connectGame, type GameSocket, type SocketStatus } from '../socket/gameSocket'
 import type { ClientMessage } from '../socket/messages'
 import { initialRoomState, roomReducer } from '../socket/roomReducer'
@@ -60,6 +62,13 @@ export function Room({ user, roomId, onExit }: { user: User; roomId: string; onE
           <button onClick={() => send({ type: 'READY', ready: !me?.ready })}>{me?.ready ? '준비 취소' : '준비'}</button>{' '}
           전원이 준비하면 바로 시작합니다
         </p>
+      )}
+
+      {state.game && (
+        <>
+          <GamePanel game={state.game} tick={state.tick} me={state.me} />
+          {room?.status === 'PLAYING' && <OrderForm game={state.game} lastOrder={state.lastOrder} onSend={send} />}
+        </>
       )}
 
       <h3>알림</h3>
