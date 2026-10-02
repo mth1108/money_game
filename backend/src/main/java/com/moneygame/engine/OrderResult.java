@@ -26,7 +26,9 @@ public record OrderResult(boolean accepted,
         NO_POSITION,
         UNKNOWN_SYMBOL,
         UNKNOWN_PLAYER,
-        NOT_RUNNING
+        NOT_RUNNING,
+        /** 마지막 틱이 지났다. finish() 전이라도 더는 체결하지 않는다 */
+        TIME_OVER
     }
 
     public static OrderResult accept(String symbolLabel, long quantity, BigDecimal price,

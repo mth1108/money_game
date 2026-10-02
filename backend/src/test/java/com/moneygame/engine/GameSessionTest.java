@@ -337,15 +337,17 @@ class GameSessionTest {
             // 종료 정리에 수수료를 면제하면 "끝까지 안 파는 쪽"이 구조적으로 유리해져
             // 손절 판단 자체가 사라진다. 사유 불문 1회 규칙이 지켜지면
             // 두 경로의 최종 자산이 정확히 같아야 한다.
+            // 마지막 틱이 지나면 주문이 거부되므로(TIME_OVER), 주문할 수 있는 마지막 순간에 판다.
             GameSession s = session(flat("10000", 3), 3);
             s.addPlayer("u1", "마지막틱에판다");
             s.addPlayer("u2", "끝까지버틴다");
             s.start();
             s.submitOrder(OrderRequest.buy("u1", "A", bd("100000"), 3));
             s.submitOrder(OrderRequest.buy("u2", "A", bd("100000"), 3));
-            for (int i = 0; i < 3; i++) s.tick();
+            for (int i = 0; i < 2; i++) s.tick();
 
-            s.submitOrder(OrderRequest.sell("u1", "A"));   // 직접 매도
+            assertTrue(s.submitOrder(OrderRequest.sell("u1", "A")).accepted());   // 직접 매도
+            s.tick();
             GameResult r = s.finish();                      // u2 는 종료 정리로 청산
 
             BigDecimal u1 = s.player("u1").cash();
@@ -458,8 +460,9 @@ class GameSessionTest {
 
         @Test
         void 매도_수수료도_잔여_현금을_넘지_않는다() {
-            List<BigDecimal> series = new ArrayList<>(List.of(bd("10000"), bd("6666.6668")));
-            GameSession s = session(series, 1);
+            // 매도할 틱이 남아 있어야 하므로 판 길이를 2 로 둔다 (마지막 틱 이후는 TIME_OVER)
+            List<BigDecimal> series = new ArrayList<>(List.of(bd("10000"), bd("6666.6668"), bd("6666.6668")));
+            GameSession s = session(series, 2);
             s.addPlayer("u1", "풀베팅");
             s.start();
             s.submitOrder(OrderRequest.buy("u1", "A", bd(풀베팅), 3));
@@ -470,6 +473,176 @@ class GameSessionTest {
             assertTrue(sell.accepted());
             assertEquals(0, s.player("u1").cash().signum());
             assertTrue(s.player("u1").cash().signum() >= 0);
+        }
+    }
+
+    @Nested
+    @DisplayName("마지막 틱 이후 주문")
+    class 마지막틱이후 {
+
+        @Test
+        void 마지막_틱이_지나면_finish_전이라도_주문을_거부한다() {
+            GameSession s = session(flat("10000", 2), 2);
+            s.addPlayer("u1", "p1");
+            s.start();
+            s.tick();
+            assertTrue(s.submitOrder(OrderRequest.buy("u1", "A", bd("100000"), 3)).accepted(),
+                    "마지막 틱 전에는 체결된다");
+            s.tick();
+
+            OrderResult sell = s.submitOrder(OrderRequest.sell("u1", "A"));
+            OrderResult buy = s.submitOrder(OrderRequest.buy("u1", "A", bd("100000"), 1));
+
+            assertFalse(sell.accepted());
+            assertEquals(OrderResult.RejectReason.TIME_OVER, sell.reason());
+            assertEquals(OrderResult.RejectReason.TIME_OVER, buy.reason());
+            assertEquals(1, s.player("u1").positions().size(), "포지션은 종료 정리로만 닫힌다");
+        }
+
+        @Test
+        void 종료한_판의_주문은_NOT_RUNNING_이다() {
+            GameSession s = session(flat("10000", 1), 1);
+            s.addPlayer("u1", "p1");
+            s.start();
+            s.tick();
+            s.finish();
+
+            assertEquals(OrderResult.RejectReason.NOT_RUNNING,
+                    s.submitOrder(OrderRequest.buy("u1", "A", bd("100000"), 1)).reason());
+        }
+    }
+
+    @Nested
+    @DisplayName("공동 순위")
+    class 공동순위 {
+
+        /** 0틱 10000, 이후 12000 으로 오르는 시세 */
+        private GameSession 상승세션() {
+            List<BigDecimal> series = new ArrayList<>(List.of(bd("10000"), bd("12000"), bd("12000")));
+            return session(series, 2);
+        }
+
+        @Test
+        void 거래하지_않은_플레이어끼리는_공동_순위다() {
+            GameSession s = 상승세션();
+            s.addPlayer("u1", "산사람");
+            s.addPlayer("u2", "관망1");
+            s.addPlayer("u3", "관망2");
+            s.start();
+            s.submitOrder(OrderRequest.buy("u1", "A", bd("100000"), 3));
+            s.tick();
+            s.tick();
+
+            List<GameResult.Rank> r = s.finish().rankings();
+
+            assertEquals(List.of(1, 2, 2), r.stream().map(GameResult.Rank::rank).toList());
+            assertEquals("u1", r.get(0).userId());
+        }
+
+        @Test
+        void 공동_1위_다음은_3위다() {
+            GameSession s = session(flat("10000", 2), 2);
+            s.addPlayer("u1", "관망1");
+            s.addPlayer("u2", "관망2");
+            s.addPlayer("u3", "수수료만냄");
+            s.start();
+            s.submitOrder(OrderRequest.buy("u3", "A", bd("100000"), 3));
+            s.tick();
+            s.tick();
+
+            List<GameResult.Rank> r = s.finish().rankings();
+
+            assertEquals(List.of(1, 1, 3), r.stream().map(GameResult.Rank::rank).toList());
+            assertEquals("u3", r.get(2).userId());
+        }
+
+        @Test
+        void 동점자는_입장_순서대로_나열된다() {
+            GameSession s = session(flat("10000", 1), 1);
+            s.addPlayer("u1", "먼저");
+            s.addPlayer("u2", "나중");
+            s.start();
+            s.tick();
+
+            List<GameResult.Rank> r = s.finish().rankings();
+
+            assertEquals("u1", r.get(0).userId());
+            assertEquals("u2", r.get(1).userId());
+            assertEquals(r.get(0).rank(), r.get(1).rank());
+        }
+    }
+
+    @Nested
+    @DisplayName("체결 내역")
+    class 체결내역 {
+
+        @Test
+        void 매수_매도_강제청산_종료정리가_시간순으로_남는다() {
+            // A: 0틱 10000 -> 1틱 6666.6667 (배율 3 청산가) -> 2틱 6000
+            // B: 10000 고정
+            List<BigDecimal> a = new ArrayList<>(List.of(bd("10000"), bd("6666.6667"), bd("6000")));
+            List<BigDecimal> b = new ArrayList<>(List.of(bd("10000"), bd("10000"), bd("10000")));
+            GameSession s = new GameSession(List.of("A", "B"), Map.of("A", a, "B", b), SEED, LEVERAGES, 2);
+            s.addPlayer("u1", "p1");
+            s.addPlayer("u2", "p2");
+            s.start();
+            s.submitOrder(OrderRequest.buy("u1", "A", bd("100000"), 3));   // 0틱 매수
+            s.submitOrder(OrderRequest.buy("u2", "B", bd("100000"), 2));   // 0틱 매수
+            s.tick();                                                       // 1틱 u1 강제 청산
+            s.submitOrder(OrderRequest.buy("u1", "B", bd("50000"), 1));    // 1틱 매수
+            s.submitOrder(OrderRequest.sell("u1", "B"));                   // 1틱 매도
+            s.tick();
+
+            GameResult r = s.finish();                                      // 2틱 u2 종료 정리
+            List<Trade> t = r.trades();
+
+            assertEquals(List.of(Trade.Kind.BUY, Trade.Kind.BUY, Trade.Kind.LIQUIDATION,
+                            Trade.Kind.BUY, Trade.Kind.SELL, Trade.Kind.SETTLEMENT),
+                    t.stream().map(Trade::kind).toList());
+            assertEquals(List.of(0, 0, 1, 1, 1, 2), t.stream().map(Trade::tickIndex).toList());
+
+            Trade liq = t.get(2);
+            assertEquals("u1", liq.userId());
+            assertEquals("A", liq.symbolLabel());
+            assertEquals(30L, liq.quantity());
+            assertEquals(bd("6666.6667"), liq.price());
+            assertEquals(0, bd("100000").compareTo(liq.margin()));
+            assertEquals(3, liq.leverage());
+            assertEquals(bd("300.0001"), liq.fee());
+            assertTrue(liq.isLiquidation());
+            assertFalse(liq.isBuy());
+
+            Trade settle = t.get(5);
+            assertEquals("u2", settle.userId());
+            assertEquals(2, settle.leverage());
+            assertEquals(0, bd("10000").compareTo(settle.price()));
+        }
+
+        @Test
+        void 체결_내역의_수수료는_실제로_부과된_금액이다() {
+            // 풀베팅 후 청산: 청산 수수료 원래값 2980.0001 이 잔여 현금 2196.66666667 로 깎인다
+            List<BigDecimal> series = new ArrayList<>(List.of(bd("10000"), bd("6666.6667")));
+            GameSession s = session(series, 1);
+            s.addPlayer("u1", "풀베팅");
+            s.start();
+            s.submitOrder(OrderRequest.buy("u1", "A", bd("995000"), 3));
+            s.tick();
+
+            Trade liq = s.trades().get(1);
+
+            assertEquals(Trade.Kind.LIQUIDATION, liq.kind());
+            assertEquals(0, bd("2196.66666667").compareTo(liq.fee()));
+        }
+
+        @Test
+        void 거부된_주문은_남지_않는다() {
+            GameSession s = session(flat("10000", 2), 2);
+            s.addPlayer("u1", "p1");
+            s.start();
+            s.submitOrder(OrderRequest.buy("u1", "A", bd("100000"), 5));   // 허용되지 않은 배율
+            s.submitOrder(OrderRequest.sell("u1", "A"));                   // 포지션 없음
+
+            assertTrue(s.trades().isEmpty());
         }
     }
 

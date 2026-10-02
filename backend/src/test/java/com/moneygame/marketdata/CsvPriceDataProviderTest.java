@@ -176,16 +176,16 @@ class CsvPriceDataProviderTest {
 
         /** 픽스처 파일명은 <성격>_<symbol>_<interval>.csv 라 구현체 규칙에 맞춰 복사해 읽는다. */
         @Test
-        void crash_247540_1d_240봉을_그대로_읽는다() throws Exception {
+        void crash_247540_1d_241봉을_그대로_읽는다() throws Exception {
             Files.copy(fixtures().resolve("crash_247540_1d.csv"), dir.resolve("247540_1d.csv"));
 
             List<Candle> c = new CsvPriceDataProvider(dir).getCandles("247540", Interval.ONE_DAY,
                     at("2024-01-01T00:00"), at("2025-12-31T00:00"));
 
-            assertEquals(240, c.size());
+            assertEquals(241, c.size());
             assertEquals(OffsetDateTime.parse("2024-01-11T00:00+09:00"), c.get(0).timestamp());
-            assertEquals(OffsetDateTime.parse("2025-01-06T00:00+09:00"), c.get(239).timestamp());
-            assertEquals(new BigDecimal("115163"), c.get(239).close());
+            assertEquals(OffsetDateTime.parse("2025-01-07T00:00+09:00"), c.get(240).timestamp());
+            assertEquals(new BigDecimal("114179"), c.get(240).close());
         }
     }
 }

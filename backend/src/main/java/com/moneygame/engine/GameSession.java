@@ -39,6 +39,9 @@ public final class GameSession {
 
     private final Map<String, PlayerState> players = new LinkedHashMap<>();
 
+    /** 체결 내역. 메모리에만 쌓고 종료 시 GameResult 로 넘긴다 (§1.2). */
+    private final List<Trade> trades = new ArrayList<>();
+
     private Status status = Status.READY;
     private int tickIndex = -1;
 
@@ -123,6 +126,7 @@ public final class GameSession {
                     player.countLiquidation();
                     liquidations.add(new TickResult.Liquidation(
                             player.userId(), label, price, position.margin(), fee));
+                    record(player, position, Trade.Kind.LIQUIDATION, price, fee);
                 }
             }
         }
@@ -138,6 +142,10 @@ public final class GameSession {
     public OrderResult submitOrder(OrderRequest order) {
         if (status != Status.RUNNING) {
             return OrderResult.reject(OrderResult.RejectReason.NOT_RUNNING, order.symbolLabel());
+        }
+        if (tickIndex >= totalTicks) {
+            // 마지막 틱이 지났다. finish() 가 불리기 전 틈에 들어온 주문도 받지 않는다
+            return OrderResult.reject(OrderResult.RejectReason.TIME_OVER, order.symbolLabel());
         }
         PlayerState player = players.get(order.userId());
         if (player == null) {
@@ -176,8 +184,10 @@ public final class GameSession {
         }
 
         player.deduct(actualMargin.add(fee));
-        player.openPosition(Position.open(label, price, quantity, order.leverage()));
+        Position position = Position.open(label, price, quantity, order.leverage());
+        player.openPosition(position);
         player.countTrade();
+        record(player, position, Trade.Kind.BUY, price, fee);
         return OrderResult.accept(label, quantity, price, actualMargin, fee);
     }
 
@@ -194,7 +204,14 @@ public final class GameSession {
         player.add(position.value(price));
         BigDecimal fee = player.chargeFee(LiquidationRule.fee(position.quantity(), price));
         player.countTrade();
+        record(player, position, Trade.Kind.SELL, price, fee);
         return OrderResult.accept(label, position.quantity(), price, position.margin(), fee);
+    }
+
+    private void record(PlayerState player, Position position, Trade.Kind kind,
+                        BigDecimal price, BigDecimal fee) {
+        trades.add(new Trade(tickIndex, player.userId(), position.symbolLabel(), kind,
+                position.quantity(), price, position.margin(), position.leverage(), fee));
     }
 
     /**
@@ -215,7 +232,8 @@ public final class GameSession {
                 BigDecimal price = prices.get(label);
                 if (price != null) {
                     player.add(position.value(price));
-                    player.chargeFee(LiquidationRule.fee(position.quantity(), price));
+                    BigDecimal fee = player.chargeFee(LiquidationRule.fee(position.quantity(), price));
+                    record(player, position, Trade.Kind.SETTLEMENT, price, fee);
                 }
             }
         }
@@ -224,17 +242,24 @@ public final class GameSession {
         List<PlayerState> sorted = new ArrayList<>(players.values());
         sorted.sort(Comparator.comparing(PlayerState::cash).reversed());
 
+        // 동점이면 같은 순위, 다음 순위는 동점 인원만큼 건너뛴다 (1, 1, 3) — §3 M4 「순위」
         List<GameResult.Rank> ranks = new ArrayList<>();
-        int rank = 1;
-        for (PlayerState player : sorted) {
+        BigDecimal previous = null;
+        int rank = 0;
+        for (int i = 0; i < sorted.size(); i++) {
+            PlayerState player = sorted.get(i);
             BigDecimal total = player.cash();
+            if (previous == null || total.compareTo(previous) != 0) {
+                rank = i + 1;
+            }
+            previous = total;
             BigDecimal returnRate = total.subtract(seedMoney)
                     .divide(seedMoney, LiquidationRule.CALC_SCALE, RoundingMode.HALF_UP)
                     .setScale(LiquidationRule.PRICE_SCALE, RoundingMode.HALF_UP);
-            ranks.add(new GameResult.Rank(rank++, player.userId(), player.nickname(),
+            ranks.add(new GameResult.Rank(rank, player.userId(), player.nickname(),
                     total, returnRate, player.tradeCount(), player.liquidatedCount()));
         }
-        return new GameResult(List.copyOf(ranks));
+        return new GameResult(List.copyOf(ranks), List.copyOf(trades));
     }
 
     public BigDecimal currentPrice(String symbolLabel) {
@@ -261,4 +286,5 @@ public final class GameSession {
     public Set<Integer> allowedLeverages() { return allowedLeverages; }
     public PlayerState player(String userId) { return players.get(userId); }
     public Map<String, PlayerState> players() { return Collections.unmodifiableMap(players); }
+    public List<Trade> trades() { return Collections.unmodifiableList(trades); }
 }
