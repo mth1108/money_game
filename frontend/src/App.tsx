@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { api } from './api/client'
 import type { User } from './api/types'
 import { Enter } from './pages/Enter'
+import { Lobby } from './pages/Lobby'
+import { Room } from './pages/Room'
 import { loadUser, saveUser } from './session'
 
 type ServerStatus = '확인 중' | '연결됨' | '끊김'
@@ -11,6 +13,7 @@ type ServerStatus = '확인 중' | '연결됨' | '끊김'
 export default function App() {
   const [user, setUser] = useState<User | null>(loadUser)
   const [server, setServer] = useState<ServerStatus>('확인 중')
+  const [roomId, setRoomId] = useState<string | null>(null)
 
   // 서버 연결 표시. 5초마다 방 목록을 불러 본다
   useEffect(() => {
@@ -31,6 +34,7 @@ export default function App() {
   function enter(u: User | null) {
     saveUser(u)
     setUser(u)
+    setRoomId(null)
   }
 
   return (
@@ -39,11 +43,14 @@ export default function App() {
       <p>서버: {server}</p>
       {user ? (
         <p>
-          입장: {user.nickname} (userId {user.id}) <button onClick={() => enter(null)}>닉네임 바꾸기</button>
+          입장: {user.nickname} (userId {user.id}){' '}
+          {roomId === null && <button onClick={() => enter(null)}>닉네임 바꾸기</button>}
         </p>
       ) : (
         <Enter onEnter={enter} />
       )}
+      {user && roomId === null && <Lobby user={user} onEnterRoom={setRoomId} />}
+      {user && roomId !== null && <Room user={user} roomId={roomId} onExit={() => setRoomId(null)} />}
     </div>
   )
 }
