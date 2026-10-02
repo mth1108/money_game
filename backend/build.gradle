@@ -32,6 +32,8 @@ dependencies {
 
     // M6 방 관리 REST. 2026-09-25 승인 (§8 결정됨). collector · scenario 프로파일은 웹 서버를 띄우지 않는다
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    // M7 실시간 통신. 순수 WebSocket + JSON {type, payload}. STOMP 는 쓰지 않는다. 2026-09-25 승인
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
