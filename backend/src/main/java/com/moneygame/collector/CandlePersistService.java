@@ -65,6 +65,19 @@ public class CandlePersistService {
         return written;
     }
 
+    /**
+     * 이미 받은 구간 (collect_logs). 결손 구간 계산(CollectPlanner)의 재료다.
+     * symbols 에 없는 종목이면 받은 적이 없으므로 빈 목록이다.
+     */
+    public List<CollectPlanner.Range> coverage(String code, Interval interval) {
+        return symbols.findByCode(code)
+                .map(symbol -> collectLogs.findBySymbolIdAndBarIntervalOrderByToTsDesc(symbol.getId(), interval.code())
+                        .stream()
+                        .map(log -> new CollectPlanner.Range(log.getFromTs(), log.getToTs()))
+                        .toList())
+                .orElse(List.of());
+    }
+
     /** KRX 종목코드는 6자리 숫자다. 그 외는 미국 티커로 본다. */
     private static boolean isKrxCode(String code) {
         if (code.length() != 6) {

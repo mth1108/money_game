@@ -36,12 +36,9 @@ import java.util.List;
  */
 @Component
 @Profile("collector")
-public class TossApiClient {
+public class TossApiClient implements CandleSource {
 
     private static final Logger log = LoggerFactory.getLogger(TossApiClient.class);
-
-    /** 요청당 상한. API 가 정한 값이다. */
-    public static final int MAX_COUNT = 200;
 
     private final TossApiProperties properties;
     private final CollectorProperties collectorProperties;
@@ -62,20 +59,8 @@ public class TossApiClient {
                 .build();
     }
 
-    /**
-     * 한 페이지.
-     *
-     * nextBefore 는 이 페이지 마지막 봉의 *다음* 봉을 가리킨다. 그대로 넘기면
-     * 중복 없이 이어진다. null 이면 마지막 페이지다.
-     */
-    public record CandlePage(List<Candle> candles, OffsetDateTime nextBefore) {
-
-        public boolean isLast() {
-            return nextBefore == null || candles.isEmpty();
-        }
-    }
-
     /** 최신순(내림차순)으로 최대 count 개. before 가 null 이면 가장 최근 봉부터. */
+    @Override
     public CandlePage candles(String symbol, Interval interval, OffsetDateTime before,
                               int count, boolean adjusted) {
         StringBuilder url = new StringBuilder(properties.baseUrl())

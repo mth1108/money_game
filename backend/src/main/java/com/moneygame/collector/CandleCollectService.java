@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -21,18 +22,23 @@ import java.util.Map;
  *
  * 반환은 항상 시간 오름차순이다. API 는 최신순으로 주므로 여기서 뒤집는다 (§3 M2).
  * timestamp 로 중복을 제거하므로 같은 명령을 두 번 실행해도 중복이 생기지 않는다.
+ *
+ * 수집 방식은 하나다 — 「before 에서 시작해 stopAt 까지 과거로 훑기」.
+ *   전체 수집   : before = null(가장 최근),  stopAt = --from
+ *   결손 구간   : before = 구간 끝,          stopAt = 구간 시작  (CollectPlanner 가 계산)
  */
 @Service
 @Profile("collector")
 public class CandleCollectService {
 
     private static final Logger log = LoggerFactory.getLogger(CandleCollectService.class);
+    private static final ZoneOffset KST = ZoneOffset.ofHours(9);
 
-    private final TossApiClient client;
+    private final CandleSource source;
     private final CollectorProperties properties;
 
-    public CandleCollectService(TossApiClient client, CollectorProperties properties) {
-        this.client = client;
+    public CandleCollectService(CandleSource source, CollectorProperties properties) {
+        this.source = source;
         this.properties = properties;
     }
 
@@ -48,20 +54,40 @@ public class CandleCollectService {
     }
 
     /**
+     * 가장 최근 봉부터 from 까지 (전체 수집).
+     *
      * @param from     이 시각까지만 거슬러 올라간다. null 이면 maxBars 까지
      * @param maxBars  수집 상한. 무한 순회를 막는 안전장치다
      */
     public CollectResult collect(String symbol, Interval interval,
                                  OffsetDateTime from, int maxBars, boolean adjusted) {
+        return collect(symbol, interval, null, from, maxBars, adjusted);
+    }
+
+    /** 결손 구간 하나만 (CollectPlanner 가 계산한 구간, KST). 끝이 열린 구간은 가장 최근 봉부터 훑는다. */
+    public CollectResult collectGap(String symbol, Interval interval, CollectPlanner.Range gap,
+                                    int maxBars, boolean adjusted) {
+        OffsetDateTime before = gap.openEnded() ? null : gap.to().atOffset(KST);
+        return collect(symbol, interval, before, gap.from().atOffset(KST), maxBars, adjusted);
+    }
+
+    /**
+     * before(포함)에서 시작해 stopAt(포함)까지 과거로 훑는다. stopAt 보다 이른 봉은 버린다.
+     *
+     * @param before null 이면 가장 최근 봉부터
+     * @param stopAt null 이면 maxBars 나 조회 경계까지
+     */
+    CollectResult collect(String symbol, Interval interval, OffsetDateTime before, OffsetDateTime stopAt,
+                          int maxBars, boolean adjusted) {
         Instant started = Instant.now();
         Map<OffsetDateTime, Candle> collected = new LinkedHashMap<>();
-        OffsetDateTime before = null;
+        OffsetDateTime cursor = before;
         OffsetDateTime newestSeen = null;
         int requests = 0;
         String stopReason;
 
         while (true) {
-            TossApiClient.CandlePage page = client.candles(symbol, interval, before, TossApiClient.MAX_COUNT, adjusted);
+            CandlePage page = source.candles(symbol, interval, cursor, CandleSource.MAX_COUNT, adjusted);
             requests++;
 
             if (page.candles().isEmpty()) {
@@ -81,11 +107,11 @@ public class CandleCollectService {
             if (requests % 10 == 0) {
                 log.info("  {} {} — {}회 / {}봉 {}  현재 {}",
                         symbol, interval.code(), requests, collected.size(),
-                        progress(started, collected.size(), maxBars, from, newestSeen, oldestInPage.timestamp()),
+                        progress(started, collected.size(), maxBars, stopAt, newestSeen, oldestInPage.timestamp()),
                         oldestInPage.timestamp());
             }
-            if (from != null && !oldestInPage.timestamp().isAfter(from)) {
-                stopReason = "요청 구간 시작(" + from + ")에 도달했습니다";
+            if (stopAt != null && !oldestInPage.timestamp().isAfter(stopAt)) {
+                stopReason = "요청 구간 시작(" + stopAt + ")에 도달했습니다";
                 break;
             }
             if (collected.size() >= maxBars) {
@@ -96,13 +122,13 @@ public class CandleCollectService {
                 stopReason = "nextBefore = null — 조회 가능 경계입니다";
                 break;
             }
-            before = page.nextBefore();
+            cursor = page.nextBefore();
             sleep(properties.requestDelayMs());
         }
 
         List<Candle> ascending = new ArrayList<>(collected.values());
-        if (from != null) {
-            ascending.removeIf(candle -> candle.timestamp().isBefore(from));
+        if (stopAt != null) {
+            ascending.removeIf(candle -> candle.timestamp().isBefore(stopAt));
         }
         ascending.sort(Comparator.comparing(Candle::timestamp));
 
