@@ -6,6 +6,7 @@ import com.moneygame.engine.GameResult;
 import com.moneygame.engine.OrderRequest;
 import com.moneygame.engine.OrderResult;
 import com.moneygame.engine.TickResult;
+import com.moneygame.position.LiquidationRule;
 import com.moneygame.realtime.message.ClientMessage;
 import com.moneygame.realtime.message.ServerMessage;
 import com.moneygame.room.Bar;
@@ -282,7 +283,7 @@ public class GameSocketHandler extends TextWebSocketHandler implements RoomEvent
         return ServerMessage.of(ServerMessage.Type.GAME_START, new ServerMessage.GameStart(
                 start.mode(), start.labels(), start.history(), start.initialBars(), playedBars,
                 start.seedMoney(), start.leverages(),
-                start.totalTicks(), properties.tickMillis()));
+                start.totalTicks(), properties.tickMillis(), LiquidationRule.FEE_RATE));
     }
 
     private ServerMessage tickMessage(String roomId, int tickIndex, Map<String, BigDecimal> prices, Map<String, Bar> bars) {

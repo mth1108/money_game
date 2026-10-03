@@ -1,8 +1,8 @@
 // 주문 폼 — 종목 / 매수·매도 / 증거금 / 배율 (CLAUDE.md §4 P0, §3 M7 ORDER).
 // 증거금은 상한이다. 실제 차감액은 체결 수량에서 역산된다 (§1.5). 정밀도를 지키려 문자열로 보낸다.
 import { useState } from 'react'
-import type { ClientMessage, GameStart, OrderResult } from '../socket/messages'
-import { REJECT_TEXT } from '../socket/messages'
+import type { ClientMessage, GameStart, OrderResult } from '../../socket/messages'
+import { REJECT_TEXT } from '../../socket/messages'
 
 export function OrderForm({
   game,

@@ -115,6 +115,25 @@ export interface GameRecord {
   scenario: Scenario
   participants: ResultParticipant[]
   trades: TradeRow[]
+  /** 종목별 실제 시세 (결과 차트). bars[i] 가 i 틱이다. 시세를 못 읽었으면 비어 있다 */
+  charts: SymbolChart[]
+}
+
+export interface ChartBar {
+  /** KST. 1m 은 봉 종료 시각, 1d 는 거래일 */
+  time: string
+  open: Money
+  high: Money
+  low: Money
+  close: Money
+  volume: Money
+}
+
+export interface SymbolChart {
+  label: string
+  code: string
+  name: string
+  bars: ChartBar[]
 }
 
 export interface HistoryEntry {

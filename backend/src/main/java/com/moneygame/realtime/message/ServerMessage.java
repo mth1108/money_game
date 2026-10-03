@@ -52,10 +52,12 @@ public record ServerMessage(Type type, Object payload) {
      * @param history     라벨별 시작 전 과거 봉 (오래된 순). 차트 배경이다 (§8 2026-10-03)
      * @param initialBars 0틱 캔들
      * @param playedBars  라벨별 1틱 ~ 지금 틱 봉. 재접속 때만 채우고, 처음 시작이면 비어 있다
+     * @param feeRate     수수료율. 화면이 「최대」 증거금 상한을 수수료까지 감안해 잡는 데 쓴다 (P1)
      */
     public record GameStart(GameMode mode, List<String> labels, Map<String, List<Bar>> history,
                             Map<String, Bar> initialBars, Map<String, List<Bar>> playedBars,
-                            BigDecimal seedMoney, Set<Integer> leverages, int totalTicks, long tickMillis) {
+                            BigDecimal seedMoney, Set<Integer> leverages, int totalTicks, long tickMillis,
+                            BigDecimal feeRate) {
     }
 
     public record Tick(int tickIndex, int totalTicks, int remainingTicks, long remainingMillis,

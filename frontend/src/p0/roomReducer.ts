@@ -1,6 +1,6 @@
 // 방 화면 상태. WebSocket 메시지 타입마다 한 갈래씩 처리한다 (CLAUDE.md §4 「상태 관리」).
 import type { RoomView } from '../api/types'
-import type { GameEnd, GameStart, OrderResult, PlayerSnapshot, RankingEntry, ServerMessage, Tick } from './messages'
+import type { GameEnd, GameStart, OrderResult, PlayerSnapshot, RankingEntry, ServerMessage, Tick } from '../socket/messages'
 
 const RAW_LIMIT = 30
 const EVENT_LIMIT = 50

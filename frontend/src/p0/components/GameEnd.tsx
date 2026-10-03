@@ -1,6 +1,6 @@
 // 종료 — GAME_END 의 최종 순위와, M8 이 저장한 결과 상세 (CLAUDE.md §4 P0, §3 M8).
 import { useState } from 'react'
-import type { GameEnd as GameEndPayload } from '../socket/messages'
+import type { GameEnd as GameEndPayload } from '../../socket/messages'
 import { ResultView } from './ResultView'
 
 export function GameEnd({ end, myUserId }: { end: GameEndPayload; myUserId: number }) {

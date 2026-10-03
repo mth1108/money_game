@@ -1,0 +1,37 @@
+/* P1 스타일 (CLAUDE.md §4). Tailwind v4 — 색은 아래 토큰만 쓴다.
+   상승은 빨강, 하락은 파랑 (국내 증권 화면 관례). 차트 색은 src/theme.ts 에 같은 값이 있다 */
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0e14;
+  --color-panel: #121722;
+  --color-panel-2: #192132;
+  --color-line: #242e42;
+  --color-ink: #e8ebf1;
+  --color-muted: #8b95a8;
+  --color-faint: #5b6579;
+  --color-up: #f04452;
+  --color-down: #3b82f6;
+  --color-warn: #f5b83d;
+  --color-brand: #8b6cff;
+  --color-ok: #2fbf71;
+
+  --font-sans: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  html,
+  body {
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* 숫자는 자릿수가 흔들리지 않게 */
+  body {
+    font-variant-numeric: tabular-nums;
+  }
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+}

@@ -1,6 +1,6 @@
 // 게임 진행 표시 — 현재가, 남은 시간, 내 현금·포지션·총자산 (CLAUDE.md §4 P0).
 // 서버가 보낸 값을 그대로 보여준다. 화면에서 금액을 계산하지 않는다 (§1.5).
-import type { GameStart, PlayerSnapshot, Tick } from '../socket/messages'
+import type { GameStart, PlayerSnapshot, Tick } from '../../socket/messages'
 
 export function GamePanel({ game, tick, me }: { game: GameStart; tick: Tick | null; me: PlayerSnapshot | null }) {
   const prices = tick?.prices ?? Object.fromEntries(game.labels.map((l) => [l, game.initialBars[l].close]))

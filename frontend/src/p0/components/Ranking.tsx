@@ -1,5 +1,5 @@
 // 순위 — RANKING 은 5초마다, 모든 참가자의 포지션과 배율을 담는다 (의도된 설계, CLAUDE.md §3 M7).
-import type { RankingEntry } from '../socket/messages'
+import type { RankingEntry } from '../../socket/messages'
 
 export function Ranking({ ranking, tickIndex, myUserId }: { ranking: RankingEntry[]; tickIndex: number; myUserId: string }) {
   return (

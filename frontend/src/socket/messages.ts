@@ -46,11 +46,18 @@ export interface PlayerSnapshot {
 export interface GameStart {
   mode: GameMode
   labels: string[]
+  /** 라벨별 시작 전 과거 봉 (오래된 순). 차트 배경이다 */
+  history: Record<string, Bar[]>
+  /** 0틱 캔들 (시작가) */
   initialBars: Record<string, Bar>
+  /** 라벨별 1틱 ~ 지금 틱 봉. 재접속 때만 채워진다 */
+  playedBars: Record<string, Bar[]>
   seedMoney: Money
   leverages: number[]
   totalTicks: number
   tickMillis: number
+  /** 수수료율 ("0.0015"). 「최대」 증거금 상한을 잡는 데 쓴다 */
+  feeRate: Money
 }
 
 export interface Tick {

@@ -1,8 +1,8 @@
 // 결과 상세 — 순위·수익률·내 거래(시간 순)·전체 체결·실제 종목명 공개 (CLAUDE.md §3 M8).
 // 게임 종료 화면과 로비의 「내 전적」에서 함께 쓴다.
 import { useEffect, useState } from 'react'
-import { api } from '../api/client'
-import type { GameRecord, TradeRow } from '../api/types'
+import { api } from '../../api/client'
+import type { GameRecord, TradeRow } from '../../api/types'
 
 const KIND_TEXT = { BUY: '매수', SELL: '매도', LIQUIDATION: '강제 청산', SETTLEMENT: '종료 정리' } as const
 
