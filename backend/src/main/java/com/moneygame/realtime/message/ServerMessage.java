@@ -75,8 +75,11 @@ public record ServerMessage(Type type, Object payload) {
     public record OrderResultPayload(String userId, OrderResult result) {
     }
 
-    /** @param resultId 결과 조회용 ID. M8 전에는 방 ID 다 — GET /api/rooms/{id}/result (§9-7) */
-    public record GameEnd(String resultId, List<GameResult.Rank> rankings) {
+    /**
+     * @param resultId 결과 조회용 ID (game_rooms.id) — GET /api/results/{resultId}. 저장에 실패했으면 null
+     * @param roomId   끝난 방 ID
+     */
+    public record GameEnd(Long resultId, String roomId, List<GameResult.Rank> rankings) {
     }
 
     public record Error(String message) {

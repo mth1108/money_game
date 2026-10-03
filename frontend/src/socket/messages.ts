@@ -104,6 +104,13 @@ export interface Liquidated {
   fee: Money
 }
 
+/** resultId 는 M8 이 저장한 결과 ID. 저장에 실패했으면 null 이다 */
+export interface GameEnd {
+  resultId: number | null
+  roomId: string
+  rankings: Rank[]
+}
+
 export type ServerMessage =
   | { type: 'ROOM_STATE'; payload: RoomView }
   | { type: 'GAME_START'; payload: GameStart }
@@ -113,7 +120,7 @@ export type ServerMessage =
   | { type: 'RANKING'; payload: { tickIndex: number; rankings: RankingEntry[] } }
   | { type: 'LIQUIDATED'; payload: Liquidated }
   | { type: 'NEWS'; payload: { tickIndex: number; headlines: string[] } }
-  | { type: 'GAME_END'; payload: { resultId: string; rankings: Rank[] } }
+  | { type: 'GAME_END'; payload: GameEnd }
   | { type: 'ERROR'; payload: { message: string } }
 
 /** 거부 사유를 사람이 읽을 말로. 「증거금 부족」은 §1.5 에 정한 문구다 */

@@ -41,18 +41,6 @@ export interface Rank {
 
 export type TradeKind = 'BUY' | 'SELL' | 'LIQUIDATION' | 'SETTLEMENT'
 
-export interface Trade {
-  tickIndex: number
-  userId: string
-  symbolLabel: string
-  kind: TradeKind
-  quantity: number
-  price: Money
-  margin: Money
-  leverage: number
-  fee: Money
-}
-
 export interface ScenarioSymbol {
   label: string
   code: string
@@ -69,8 +57,57 @@ export interface Scenario {
   symbols: ScenarioSymbol[]
 }
 
-export interface RoomResult {
-  roomId: string
-  result: { rankings: Rank[]; trades: Trade[] }
+// ── M8 결과 (GET /api/results/{id}, /api/users/{id}/results) ──
+
+export interface ResultParticipant {
+  playerKey: string
+  userId: number | null
+  nickname: string
+  bot: boolean
+  rank: number
+  finalAsset: Money
+  returnRate: Money
+  tradeCount: number
+  liquidatedCount: number
+}
+
+export interface TradeRow {
+  tickIndex: number
+  playerKey: string
+  nickname: string
+  bot: boolean
+  symbolLabel: string
+  symbolCode: string | null
+  symbolName: string | null
+  kind: TradeKind
+  quantity: number
+  price: Money
+  margin: Money
+  leverage: number
+  fee: Money
+}
+
+export interface GameRecord {
+  id: number
+  roomCode: string
+  mode: GameMode
+  seedMoney: Money
+  totalTicks: number
+  startedAt: string
+  finishedAt: string
   scenario: Scenario
+  participants: ResultParticipant[]
+  trades: TradeRow[]
+}
+
+export interface HistoryEntry {
+  gameId: number
+  finishedAt: string
+  mode: GameMode
+  scenarioTitle: string
+  rank: number
+  playerCount: number
+  finalAsset: Money
+  returnRate: Money
+  liquidatedCount: number
 }

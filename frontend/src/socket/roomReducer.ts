@@ -1,6 +1,6 @@
 // 방 화면 상태. WebSocket 메시지 타입마다 한 갈래씩 처리한다 (CLAUDE.md §4 「상태 관리」).
-import type { Rank, RoomView } from '../api/types'
-import type { GameStart, OrderResult, PlayerSnapshot, RankingEntry, ServerMessage, Tick } from './messages'
+import type { RoomView } from '../api/types'
+import type { GameEnd, GameStart, OrderResult, PlayerSnapshot, RankingEntry, ServerMessage, Tick } from './messages'
 
 const RAW_LIMIT = 30
 const EVENT_LIMIT = 50
@@ -15,7 +15,7 @@ export interface RoomState {
   rankingTick: number
   /** 청산·뉴스·오류 알림. 최근 것이 위 */
   events: string[]
-  end: { resultId: string; rankings: Rank[] } | null
+  end: GameEnd | null
   /** 방이 닫혔거나 없어서 더 있을 수 없다. 이유를 보여주고 로비로 보낸다 */
   gone: string | null
   /** 받은 원본 JSON. 최근 것이 위 (P0: 「raw JSON 을 그대로 화면에 흘리기」) */

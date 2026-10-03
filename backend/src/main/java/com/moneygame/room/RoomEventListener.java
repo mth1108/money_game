@@ -37,9 +37,10 @@ public interface RoomEventListener {
     }
 
     /**
-     * 판이 끝났다. GAME_END. scenario 로 실제 종목명을 공개한다.
-     * M8 이 생기면 여기서 결과를 저장한다 (지금은 메모리에만 둔다 — CLAUDE.md §9).
+     * 판이 끝났다. GAME_END. 결과는 이미 M8 이 저장했다.
+     *
+     * @param resultId 결과 ID (game_rooms.id). 저장에 실패했으면 null
      */
-    default void onGameFinished(String roomId, GameResult result, Scenario scenario) {
+    default void onGameFinished(String roomId, GameResult result, Scenario scenario, Long resultId) {
     }
 }

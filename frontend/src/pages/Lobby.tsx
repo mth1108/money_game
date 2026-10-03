@@ -1,7 +1,8 @@
 // 방 목록 / 만들기 / 입장 (CLAUDE.md §3 M6).
 import { useEffect, useState } from 'react'
 import { api } from '../api/client'
-import type { GameMode, RoomView, User } from '../api/types'
+import type { GameMode, HistoryEntry, RoomView, User } from '../api/types'
+import { ResultView } from '../components/ResultView'
 
 export function Lobby({ user, onEnterRoom }: { user: User; onEnterRoom: (roomId: string) => void }) {
   const [rooms, setRooms] = useState<RoomView[]>([])
@@ -10,6 +11,16 @@ export function Lobby({ user, onEnterRoom }: { user: User; onEnterRoom: (roomId:
   const [scenarioId, setScenarioId] = useState('')
   const [seedMoney, setSeedMoney] = useState('100000000')
   const [error, setError] = useState<string | null>(null)
+  const [history, setHistory] = useState<HistoryEntry[]>([])
+  const [openResult, setOpenResult] = useState<number | null>(null)
+
+  // 내 전적 (M8). 로비에 들어올 때 한 번 읽는다
+  useEffect(() => {
+    api
+      .history(user.id)
+      .then(setHistory)
+      .catch((e: Error) => setError(e.message))
+  }, [user.id])
 
   // 대기 중인 방 목록. 2초마다 새로 읽는다
   useEffect(() => {
@@ -73,6 +84,21 @@ export function Lobby({ user, onEnterRoom }: { user: User; onEnterRoom: (roomId:
             {' · '}
             {r.participants.map((p) => `${p.nickname}${p.ready ? '(준비)' : ''}`).join(', ')}{' '}
             <button onClick={() => onEnterRoom(r.id)}>입장</button>
+          </li>
+        ))}
+      </ul>
+
+      <h2>내 전적 ({history.length})</h2>
+      {history.length === 0 && <p>없음</p>}
+      <ul>
+        {history.map((h) => (
+          <li key={h.gameId}>
+            #{h.gameId} · {h.finishedAt} · {h.mode} · 「{h.scenarioTitle}」 · {h.rank}위/{h.playerCount}명 · 최종 자산 {h.finalAsset} · 수익률{' '}
+            {h.returnRate} (비율) · 청산 {h.liquidatedCount}회{' '}
+            <button onClick={() => setOpenResult(openResult === h.gameId ? null : h.gameId)}>
+              {openResult === h.gameId ? '닫기' : '보기'}
+            </button>
+            {openResult === h.gameId && <ResultView resultId={h.gameId} myUserId={user.id} />}
           </li>
         ))}
       </ul>

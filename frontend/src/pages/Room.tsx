@@ -73,7 +73,7 @@ export function Room({ user, roomId, onExit }: { user: User; roomId: string; onE
 
       {state.game && (
         <>
-          {state.end && <GameEnd resultId={state.end.resultId} rankings={state.end.rankings} />}
+          {state.end && <GameEnd end={state.end} myUserId={user.id} />}
           <GamePanel game={state.game} tick={state.tick} me={state.me} />
           {room?.status === 'PLAYING' && <OrderForm game={state.game} lastOrder={state.lastOrder} onSend={send} />}
           <Ranking ranking={state.ranking} tickIndex={state.rankingTick} myUserId={String(user.id)} />

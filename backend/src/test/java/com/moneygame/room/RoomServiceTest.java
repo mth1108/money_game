@@ -48,7 +48,24 @@ class RoomServiceTest {
     private static final RoomProperties FAST = new RoomProperties(2, 300, 3000, 150, 10_000);
 
     private final Recorder recorder = new Recorder();
+    private final Records records = new Records();
     private RoomService service;
+
+    /** 가짜 M8. 받은 판을 모으고 101, 102, ... 을 결과 ID 로 돌려준다. fail 이면 저장 실패를 흉내 낸다 */
+    static final class Records implements GameRecorder {
+        final List<FinishedGame> games = Collections.synchronizedList(new ArrayList<>());
+        final AtomicInteger next = new AtomicInteger(101);
+        volatile boolean fail;
+
+        @Override
+        public long record(FinishedGame game) {
+            if (fail) {
+                throw new IllegalStateException("DB 가 내려갔다");
+            }
+            games.add(game);
+            return next.getAndIncrement();
+        }
+    }
 
     @AfterEach
     void tearDown() {
@@ -84,7 +101,7 @@ class RoomServiceTest {
     private RoomService service(ScenarioSource source, RoomProperties properties, RoomEventListener... extra) {
         List<RoomEventListener> listeners = new ArrayList<>(List.of(recorder));
         listeners.addAll(List.of(extra));
-        service = new RoomService(source, () -> listeners, properties);
+        service = new RoomService(source, records, () -> listeners, properties);
         return service;
     }
 
@@ -101,6 +118,7 @@ class RoomServiceTest {
         final Map<String, List<Integer>> ticks = new ConcurrentHashMap<>();
         final Map<String, Set<String>> threads = new ConcurrentHashMap<>();
         final Map<String, GameResult> finished = new ConcurrentHashMap<>();
+        final Map<String, Long> resultIds = new ConcurrentHashMap<>();
         final Map<String, CountDownLatch> done = new ConcurrentHashMap<>();
         final List<OrderResult> orders = Collections.synchronizedList(new ArrayList<>());
         final AtomicInteger started = new AtomicInteger();
@@ -140,8 +158,9 @@ class RoomServiceTest {
         }
 
         @Override
-        public void onGameFinished(String roomId, GameResult result, Scenario scenario) {
+        public void onGameFinished(String roomId, GameResult result, Scenario scenario, Long resultId) {
             finished.put(roomId, result);
+            if (resultId != null) resultIds.put(roomId, resultId);
             thread(roomId);
             latch(roomId).countDown();
         }
@@ -175,7 +194,7 @@ class RoomServiceTest {
             RoomView end = rooms.view(id);
             assertEquals(RoomStatus.FINISHED, end.status());
             assertEquals(240, end.tickIndex());
-            assertEquals(1, rooms.result(id).result().rankings().size());
+            assertEquals(1, recorder.finished.get(id).rankings().size());
         }
 
         @Test
@@ -195,10 +214,10 @@ class RoomServiceTest {
             assertEquals(240, recorder.ticks.get(up).size());
             assertEquals(240, recorder.ticks.get(down).size());
             BigDecimal seed = RoomSettings.DEFAULT_SEED_MONEY;
-            assertTrue(rooms.result(up).result().rankings().get(0).totalAsset().compareTo(seed) > 0, "오른 방은 이익");
-            assertTrue(rooms.result(down).result().rankings().get(0).totalAsset().compareTo(seed) < 0, "내린 방은 손실");
-            assertEquals("1", rooms.result(up).result().rankings().get(0).userId());
-            assertEquals("2", rooms.result(down).result().rankings().get(0).userId());
+            assertTrue(recorder.finished.get(up).rankings().get(0).totalAsset().compareTo(seed) > 0, "오른 방은 이익");
+            assertTrue(recorder.finished.get(down).rankings().get(0).totalAsset().compareTo(seed) < 0, "내린 방은 손실");
+            assertEquals("1", recorder.finished.get(up).rankings().get(0).userId());
+            assertEquals("2", recorder.finished.get(down).rankings().get(0).userId());
 
             // 방마다 자기 스레드 하나에서만 이벤트가 나온다 (§1.6)
             assertEquals(Set.of("room-" + up), recorder.threads.get(up));
@@ -343,7 +362,7 @@ class RoomServiceTest {
             rooms.disconnected(id, "1");
             awaitFinish(id);
 
-            assertEquals(1, rooms.result(id).result().rankings().size(), "끝까지 참가자로 남는다");
+            assertEquals(1, recorder.finished.get(id).rankings().size(), "끝까지 참가자로 남는다");
         }
 
         @Test
@@ -459,7 +478,7 @@ class RoomServiceTest {
             awaitFinish(id);
             assertEquals(Set.of("room-" + id), recorder.threads.get(id));
             assertEquals(1, recorder.orders.size());
-            assertEquals(2, rooms.result(id).result().trades().size(), "매수 + 종료 정리");
+            assertEquals(2, recorder.finished.get(id).trades().size(), "매수 + 종료 정리");
         }
 
         @Test
@@ -487,16 +506,71 @@ class RoomServiceTest {
         }
 
         @Test
-        void 끝난_방은_결과를_보관하다가_시간이_지나면_사라진다() throws Exception {
+        void 끝난_방은_보관_시간이_지나면_사라진다() throws Exception {
             RoomService rooms = service();
             String id = rooms.create("1", "p1", daily(1, null)).id();
-            assertThrows(IllegalStateException.class, () -> rooms.result(id), "끝나기 전에는 결과가 없다");
             rooms.ready(id, "1", true);
             awaitFinish(id);
 
-            assertEquals("가짜1", rooms.result(id).scenario().title(), "끝나면 실제 시나리오를 공개한다");
+            assertEquals(RoomStatus.FINISHED, rooms.view(id).status(), "끝난 직후에는 재접속용으로 남아 있다");
             Thread.sleep(FAST.finishedRetentionMillis() + 300);
             assertThrows(NoSuchElementException.class, () -> rooms.view(id));
+        }
+    }
+
+    @Nested
+    @DisplayName("결과 기록 (M8)")
+    class 결과기록 {
+
+        @Test
+        void 판이_끝나면_한_번_기록하고_결과_ID_를_알린다() throws Exception {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", RoomSettings.of(GameMode.DAILY, 2, null, new BigDecimal("5000000"))).id();
+            rooms.join(id, "2", "p2");
+            rooms.ready(id, "1", true);
+            rooms.ready(id, "2", true);
+            rooms.submitOrder(id, OrderRequest.buy("1", "A", new BigDecimal("1000000"), 2));
+            awaitFinish(id);
+
+            assertEquals(1, records.games.size(), "한 판에 한 번만 기록한다");
+            FinishedGame g = records.games.get(0);
+            assertEquals(id, g.roomCode());
+            assertEquals(GameMode.DAILY, g.mode());
+            assertEquals(new BigDecimal("5000000"), g.seedMoney());
+            assertEquals(240, g.totalTicks());
+            assertEquals("가짜1", g.scenario().title(), "실제 종목을 공개할 시나리오가 함께 간다");
+            assertFalse(g.finishedAt().isBefore(g.startedAt()));
+            assertEquals(List.of(new FinishedGame.Player("1", 1L, "p1", false), new FinishedGame.Player("2", 2L, "p2", false)),
+                    g.players());
+            assertEquals(2, g.result().trades().size(), "매수 + 종료 정리");
+            assertEquals(101L, recorder.resultIds.get(id), "GAME_END 에 실을 결과 ID");
+        }
+
+        @Test
+        void 저장에_실패해도_게임은_끝나고_결과_ID_만_없다() throws Exception {
+            records.fail = true;
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", daily(1, null)).id();
+            rooms.ready(id, "1", true);
+
+            awaitFinish(id);
+
+            assertEquals(1, recorder.finished.get(id).rankings().size(), "종료는 알린다");
+            assertFalse(recorder.resultIds.containsKey(id), "결과 ID 는 없다");
+            assertEquals(RoomStatus.FINISHED, rooms.view(id).status());
+        }
+
+        @Test
+        void 끝난_방에_다시_들어오면_결과_ID_도_준다() throws Exception {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", daily(1, null)).id();
+            rooms.ready(id, "1", true);
+            awaitFinish(id);
+            List<ResumeInfo> got = new ArrayList<>();
+
+            rooms.resume(id, "1", got::add);
+
+            assertEquals(101L, got.get(0).resultId());
         }
     }
 }

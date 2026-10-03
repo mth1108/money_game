@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.moneygame.marketdata.Candle;
 import com.moneygame.marketdata.Interval;
 import com.moneygame.room.GameMode;
+import com.moneygame.room.GameRecorder;
 import com.moneygame.room.RoomService;
 import com.moneygame.room.RoomSettings;
 import com.moneygame.room.ScenarioSource;
@@ -63,6 +64,7 @@ class GameSocketIntegrationTest {
     @Autowired ObjectMapper mapper;
     @MockitoBean ScenarioSource scenarios;
     @MockitoBean UserService users;
+    @MockitoBean GameRecorder recorder;
 
     private final List<Client> clients = new ArrayList<>();
 
@@ -89,6 +91,7 @@ class GameSocketIntegrationTest {
         when(scenarios.load(any(), any())).thenReturn(scenario());
         when(users.get(1L)).thenReturn(new UserService.User(1, "철수"));
         when(users.get(2L)).thenReturn(new UserService.User(2, "영희"));
+        when(recorder.record(any())).thenReturn(777L);
     }
 
     @AfterEach
@@ -207,7 +210,8 @@ class GameSocketIntegrationTest {
 
         // ── 종료 ──
         JsonNode end = c2.of("GAME_END").get(0);
-        assertEquals(roomId, end.at("/payload/resultId").asText());
+        assertEquals(777L, end.at("/payload/resultId").asLong(), "M8 이 저장한 결과 ID");
+        assertEquals(roomId, end.at("/payload/roomId").asText());
         assertEquals("2", end.at("/payload/rankings/0/userId").asText(), "거래하지 않은 영희가 1위");
         assertEquals(1, c1.of("GAME_END").size());
     }

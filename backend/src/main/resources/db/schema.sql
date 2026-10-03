@@ -4,9 +4,9 @@
 -- 이 파일이 유일한 DDL 원본이며 Hibernate 가 테이블을 만들지 않습니다.
 -- 여러 번 실행해도 됩니다 (CREATE TABLE IF NOT EXISTS, 시드는 upsert).
 --
--- 시세(symbols / price_candles / collect_logs)는 M1,
--- 시나리오(scenarios / scenario_symbols / news_events)는 M3 에서 만들었습니다.
--- 게임 결과(game_rooms / game_participants / trades)는 M8 에서 추가합니다.
+-- 시세(symbols / price_candles / collect_logs)는 M1, 사용자(users)는 M6,
+-- 시나리오(scenarios / scenario_symbols / news_events)는 M3,
+-- 게임 결과(game_rooms / game_participants / trades)는 M8 에서 만들었습니다.
 --
 -- 진행 중 상태를 담는 테이블은 만들지 않습니다 (§1.3).
 -- user_balance, holdings, current_positions 같은 테이블이 생기면 매 거래마다
@@ -152,6 +152,80 @@ CREATE TABLE IF NOT EXISTS news_events (
     KEY idx_news_events_scenario (scenario_id, tick_index),
     CONSTRAINT fk_news_events_scenario
         FOREIGN KEY (scenario_id) REFERENCES scenarios (id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci;
+
+-- ────────────────────────────────────────────────────────────────
+-- 게임 결과 (M8)
+--
+-- 판이 끝나는 순간 한 트랜잭션에 INSERT 만 합니다 (2026-10-03 결정, §1.2 종료 시 쓰기).
+-- 시작하지 못한 방은 남기지 않고, 상태 UPDATE 도 없습니다 (§1.3 — 진행 중 상태 테이블 금지).
+-- 금액은 엔진 계산 그대로 소수 8자리까지 담습니다 (증거금 역산이 scale 8 이다, §1.5).
+-- ────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS game_rooms (
+    id          BIGINT        NOT NULL AUTO_INCREMENT,
+    room_code   VARCHAR(16)   NOT NULL COMMENT '진행 중에 쓰던 메모리 방 ID. 재사용될 수 있어 유니크가 아니다',
+    scenario_id BIGINT        NOT NULL,
+    mode        VARCHAR(10)   NOT NULL COMMENT 'DAILY | MINUTE',
+    seed_money  DECIMAL(24,8) NOT NULL,
+    total_ticks INT           NOT NULL,
+    started_at  DATETIME      NOT NULL COMMENT 'KST',
+    finished_at DATETIME      NOT NULL COMMENT 'KST',
+    PRIMARY KEY (id),
+    KEY idx_game_rooms_finished (finished_at),
+    CONSTRAINT fk_game_rooms_scenario
+        FOREIGN KEY (scenario_id) REFERENCES scenarios (id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci;
+
+-- 참가자별 최종 결과. 봇도 순위와 자산을 남기되 user_id 는 비우고 is_bot 으로 표시합니다 (2026-10-03 결정).
+CREATE TABLE IF NOT EXISTS game_participants (
+    id               BIGINT        NOT NULL AUTO_INCREMENT,
+    game_id          BIGINT        NOT NULL,
+    player_key       VARCHAR(40)   NOT NULL COMMENT '엔진의 플레이어 ID. 사람은 users.id, 봇은 bot-N',
+    user_id          BIGINT        NULL     COMMENT '봇이면 NULL',
+    nickname         VARCHAR(20)   NOT NULL COMMENT '그 판 당시의 이름',
+    is_bot           BIT(1)        NOT NULL,
+    final_rank       INT           NOT NULL COMMENT '동점은 같은 순위 (1, 1, 3)',
+    final_asset      DECIMAL(24,8) NOT NULL,
+    return_rate      DECIMAL(12,4) NOT NULL COMMENT '비율. -1 = -100%',
+    trade_count      INT           NOT NULL,
+    liquidated_count INT           NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_game_participants_player (game_id, player_key),
+    KEY idx_game_participants_user (user_id, game_id),
+    CONSTRAINT fk_game_participants_game
+        FOREIGN KEY (game_id) REFERENCES game_rooms (id),
+    CONSTRAINT fk_game_participants_user
+        FOREIGN KEY (user_id) REFERENCES users (id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_0900_ai_ci;
+
+-- 체결 내역. kind 하나로 §5 의 「매수/매도」(BUY 여부)와 「청산 여부」(LIQUIDATION 여부)를 함께 담습니다.
+CREATE TABLE IF NOT EXISTS trades (
+    id             BIGINT        NOT NULL AUTO_INCREMENT,
+    game_id        BIGINT        NOT NULL,
+    participant_id BIGINT        NOT NULL,
+    tick_index     INT           NOT NULL COMMENT '0 = 시작 직후',
+    symbol_label   VARCHAR(1)    NOT NULL,
+    symbol_id      BIGINT        NOT NULL COMMENT '라벨이 가린 실제 종목',
+    kind           VARCHAR(12)   NOT NULL COMMENT 'BUY | SELL | LIQUIDATION | SETTLEMENT(판 종료 정리)',
+    quantity       BIGINT        NOT NULL,
+    price          DECIMAL(18,4) NOT NULL,
+    margin         DECIMAL(24,8) NOT NULL,
+    leverage       INT           NOT NULL,
+    fee            DECIMAL(24,8) NOT NULL COMMENT '실제로 부과된 금액',
+    PRIMARY KEY (id),
+    KEY idx_trades_game (game_id, tick_index),
+    CONSTRAINT fk_trades_game
+        FOREIGN KEY (game_id) REFERENCES game_rooms (id),
+    CONSTRAINT fk_trades_participant
+        FOREIGN KEY (participant_id) REFERENCES game_participants (id),
+    CONSTRAINT fk_trades_symbol
+        FOREIGN KEY (symbol_id) REFERENCES symbols (id)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_0900_ai_ci;

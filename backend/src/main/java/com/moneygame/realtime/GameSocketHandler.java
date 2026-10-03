@@ -167,7 +167,7 @@ public class GameSocketHandler extends TextWebSocketHandler implements RoomEvent
         }
         if (info.result() != null) {
             send(session, ServerMessage.of(ServerMessage.Type.GAME_END,
-                    new ServerMessage.GameEnd(roomId, info.result().rankings())));
+                    new ServerMessage.GameEnd(info.resultId(), roomId, info.result().rankings())));
         }
     }
 
@@ -272,10 +272,10 @@ public class GameSocketHandler extends TextWebSocketHandler implements RoomEvent
     }
 
     @Override
-    public void onGameFinished(String roomId, GameResult result, Scenario scenario) {
+    public void onGameFinished(String roomId, GameResult result, Scenario scenario, Long resultId) {
         totalTicks.remove(roomId);
         broadcast(roomId, ServerMessage.of(ServerMessage.Type.GAME_END,
-                new ServerMessage.GameEnd(roomId, result.rankings())));
+                new ServerMessage.GameEnd(resultId, roomId, result.rankings())));
     }
 
     private ServerMessage gameStartMessage(GameStartInfo start) {

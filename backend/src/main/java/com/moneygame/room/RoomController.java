@@ -72,12 +72,6 @@ public class RoomController {
         return rooms.ready(roomId, user(request.userId()).userId(), request.ready() == null || request.ready());
     }
 
-    /** 끝난 판의 결과와 실제 종목명. M8 이 생기기 전 임시 (CLAUDE.md §9). */
-    @GetMapping("/{roomId}/result")
-    public RoomResult result(@PathVariable String roomId) {
-        return rooms.result(roomId);
-    }
-
     private UserService.User user(Long userId) {
         if (userId == null) {
             throw new IllegalArgumentException("userId 가 필요합니다. 먼저 POST /api/users 로 닉네임을 등록하세요");

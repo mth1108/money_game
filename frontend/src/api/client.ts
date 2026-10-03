@@ -1,5 +1,5 @@
 // REST 호출 (CLAUDE.md §3 M6). 오류 응답은 {"error": "사유"} 다.
-import type { GameMode, RoomResult, RoomView, User } from './types'
+import type { GameMode, GameRecord, HistoryEntry, RoomView, User } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -36,5 +36,7 @@ export const api = {
 
   leave: (roomId: string, userId: number) => request<RoomView>('POST', `/api/rooms/${roomId}/leave`, { userId }),
 
-  result: (roomId: string) => request<RoomResult>('GET', `/api/rooms/${roomId}/result`),
+  result: (resultId: number) => request<GameRecord>('GET', `/api/results/${resultId}`),
+
+  history: (userId: number) => request<HistoryEntry[]>('GET', `/api/users/${userId}/results`),
 }

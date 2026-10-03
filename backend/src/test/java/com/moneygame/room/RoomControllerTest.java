@@ -1,8 +1,5 @@
 package com.moneygame.room;
 
-import com.moneygame.engine.GameResult;
-import com.moneygame.marketdata.Interval;
-import com.moneygame.scenario.Scenario;
 import com.moneygame.user.UserController;
 import com.moneygame.user.UserService;
 import com.moneygame.web.JsonConfig;
@@ -17,7 +14,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -122,20 +118,5 @@ class RoomControllerTest {
                 .andExpect(jsonPath("$.error").value("방이 가득 찼습니다: 4명"));
         mvc.perform(get("/api/rooms/nope"))
                 .andExpect(status().isNotFound());
-    }
-
-    @Test
-    void 금액은_문자열로_나간다() throws Exception {
-        GameResult result = new GameResult(List.of(new GameResult.Rank(1, "7", "철수",
-                new BigDecimal("100000000"), new BigDecimal("0.0000"), 0, 0)), List.of());
-        Scenario scenario = new Scenario(8, "개발용", Interval.ONE_DAY, LocalDateTime.of(2024, 5, 9, 0, 0),
-                LocalDateTime.of(2025, 5, 8, 0, 0), 241, List.of(new Scenario.ScenarioSymbol("A", "005930", "삼성전자")));
-        when(rooms.result("r1")).thenReturn(new RoomResult("r1", result, scenario));
-
-        mvc.perform(get("/api/rooms/r1/result"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.result.rankings[0].totalAsset").value("100000000"))
-                .andExpect(jsonPath("$.result.rankings[0].returnRate").value("0.0000"))
-                .andExpect(jsonPath("$.scenario.symbols[0].name").value("삼성전자"));
     }
 }

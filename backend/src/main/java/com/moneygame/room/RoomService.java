@@ -14,6 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -45,20 +47,25 @@ public class RoomService {
 
     private static final Logger log = LoggerFactory.getLogger(RoomService.class);
 
+    private static final ZoneOffset KST = ZoneOffset.ofHours(9);
+
     private final ScenarioSource scenarios;
+    private final GameRecorder recorder;
     private final Supplier<List<RoomEventListener>> listeners;
     private final RoomProperties properties;
     private final Map<String, Room> rooms = new ConcurrentHashMap<>();
 
     /** 리스너(M7)는 RoomService 를 주입받으므로 매번 늦게 찾는다 — 순환 의존을 피한다. */
     @Autowired
-    public RoomService(ScenarioSource scenarios, ObjectProvider<RoomEventListener> listeners,
-                       RoomProperties properties) {
-        this(scenarios, () -> listeners.orderedStream().toList(), properties);
+    public RoomService(ScenarioSource scenarios, GameRecorder recorder,
+                       ObjectProvider<RoomEventListener> listeners, RoomProperties properties) {
+        this(scenarios, recorder, () -> listeners.orderedStream().toList(), properties);
     }
 
-    RoomService(ScenarioSource scenarios, Supplier<List<RoomEventListener>> listeners, RoomProperties properties) {
+    RoomService(ScenarioSource scenarios, GameRecorder recorder,
+                Supplier<List<RoomEventListener>> listeners, RoomProperties properties) {
         this.scenarios = scenarios;
+        this.recorder = recorder;
         this.listeners = listeners;
         this.properties = properties;
     }
@@ -198,25 +205,14 @@ public class RoomService {
         call(room, () -> {
             requireParticipant(room, userId);
             if (room.session == null) {
-                action.accept(new ResumeInfo(room.view(), null, -1, Map.of(), Map.of(), Map.of(), null));
+                action.accept(new ResumeInfo(room.view(), null, -1, Map.of(), Map.of(), Map.of(), null, null));
                 return null;
             }
             int tick = room.session.tickIndex();
             Map<String, BigDecimal> prices = prices(room.scenario, tick);
             action.accept(new ResumeInfo(room.view(), room.startInfo, tick, prices, bars(room.scenario, tick),
-                    snapshots(room.session, prices), room.result));
+                    snapshots(room.session, prices), room.result, room.resultId));
             return null;
-        });
-    }
-
-    /** 끝난 판의 결과. M8 이 생기기 전까지는 메모리에만 있다 (CLAUDE.md §9). */
-    public RoomResult result(String roomId) {
-        Room room = find(roomId);
-        return call(room, () -> {
-            if (room.status != RoomStatus.FINISHED || room.result == null) {
-                throw new IllegalStateException("아직 끝나지 않은 방입니다: " + room.status);
-            }
-            return new RoomResult(room.id, room.result, room.scenario.scenario());
         });
     }
 
@@ -237,6 +233,7 @@ public class RoomService {
         room.scenario = loaded;
         room.session = session;
         room.status = RoomStatus.PLAYING;
+        room.startedAt = LocalDateTime.now(KST);
         room.startInfo = new GameStartInfo(room.settings.mode(), session.symbolLabels(), bars(loaded, 0),
                 session.seedMoney(), session.allowedLeverages(), totalTicks, snapshots(session, prices(loaded, 0)));
 
@@ -276,12 +273,34 @@ public class RoomService {
         room.ticker.cancel(false);
         room.result = room.session.finish();
         room.status = RoomStatus.FINISHED;
-        log.info("게임 종료 {} — 1위 {}", room.id,
+        room.resultId = record(room);
+        log.info("게임 종료 {} — 결과 #{} / 1위 {}", room.id, room.resultId,
                 room.result.rankings().isEmpty() ? "-" : room.result.rankings().get(0).nickname());
-        fire(l -> l.onGameFinished(room.id, room.result, room.scenario.scenario()));
+        Long resultId = room.resultId;
+        fire(l -> l.onGameFinished(room.id, room.result, room.scenario.scenario(), resultId));
         changed(room);
         room.executor.schedule(() -> close(room, "결과 보관 시간 경과"),
                 properties.finishedRetentionMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * M8 에 끝난 판을 넘긴다 (판 종료 시 쓰기, §1.2). 실패해도 게임은 끝난 것으로 처리한다 —
+     * 결과 ID 없이 종료를 알리고, 순위는 GAME_END 로 이미 전원에게 간다.
+     */
+    private Long record(Room room) {
+        List<FinishedGame.Player> players = new ArrayList<>();
+        for (Room.Participant p : room.participants.values()) {
+            players.add(new FinishedGame.Player(p.userId, Long.valueOf(p.userId), p.nickname, false));
+        }
+        FinishedGame game = new FinishedGame(room.id, room.settings.mode(), room.settings.seedMoney(),
+                room.session.totalTicks(), room.scenario.scenario(), room.startedAt, LocalDateTime.now(KST),
+                List.copyOf(players), room.result);
+        try {
+            return recorder.record(game);
+        } catch (RuntimeException e) {
+            log.error("결과 저장 실패 — 방 {}. 결과 ID 없이 종료를 알립니다", room.id, e);
+            return null;
+        }
     }
 
     /** 참가자를 내보낸다. 마지막 사람이면 방을 닫고, 방장이면 다음 사람에게 넘긴다. */

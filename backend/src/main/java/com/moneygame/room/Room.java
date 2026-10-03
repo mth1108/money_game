@@ -5,6 +5,7 @@ import com.moneygame.engine.GameSession;
 import com.moneygame.scenario.LoadedScenario;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,15 +38,19 @@ final class Room {
     GameSession session;
     GameStartInfo startInfo;
     ScheduledFuture<?> ticker;
-    /** 활동 없는 대기방 닫기 예약. 활동할 때마다 다시 잡는다 (§9-9) */
+    /** 활동 없는 대기방 닫기 예약. 활동할 때마다 다시 잡는다 */
     ScheduledFuture<?> waitingExpiry;
+    /** KST. 판 시작 시각 (M8 기록용) */
+    LocalDateTime startedAt;
     GameResult result;
+    /** M8 이 저장한 결과 ID. 저장 실패면 null */
+    Long resultId;
 
     static final class Participant {
         final String userId;
         final String nickname;
         boolean ready;
-        /** 대기 중 연결이 끊겨 예약된 자동 퇴장. 다시 접속하면 취소한다 (§9-9) */
+        /** 대기 중 연결이 끊겨 예약된 자동 퇴장. 다시 접속하면 취소한다 */
         ScheduledFuture<?> pendingLeave;
 
         Participant(String userId, String nickname) {

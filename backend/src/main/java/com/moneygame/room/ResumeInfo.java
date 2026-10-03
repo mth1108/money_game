@@ -13,6 +13,7 @@ import java.util.Map;
  * @param tickIndex 지금 틱. 대기 중이면 -1
  * @param players   전원의 순간 상태 (본인 PLAYER_STATE 와 RANKING 재료)
  * @param result    끝난 판이면 최종 결과, 아니면 null
+ * @param resultId  끝난 판의 결과 ID (game_rooms.id). 진행 중이거나 저장에 실패했으면 null
  */
 public record ResumeInfo(RoomView view,
                          GameStartInfo start,
@@ -20,5 +21,6 @@ public record ResumeInfo(RoomView view,
                          Map<String, BigDecimal> prices,
                          Map<String, Bar> bars,
                          Map<String, PlayerSnapshot> players,
-                         GameResult result) {
+                         GameResult result,
+                         Long resultId) {
 }

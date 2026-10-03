@@ -733,7 +733,7 @@ PlayerState
   시드머니 1억 원. 판 길이는 시나리오 봉 수 − 1 (= 240). 판 길이 설정은 §8 미결정
 - 전원이 준비하면 그 자리에서 시나리오를 읽고(§1.2 판 시작 시 읽기) 판을 시작합니다. 못 읽으면 준비가 풀리고 409
 - 대기 중에만 나갈 수 있고, 마지막 사람이 나가면 방이 사라집니다. 방장이 나가면 다음 사람이 방장
-- 끝난 방은 재접속·결과 확인용으로 10분(`room.finished-retention-millis`) 남겼다가 지웁니다 (§9-7)
+- 끝난 방은 재접속용으로 10분(`room.finished-retention-millis`) 남겼다가 지웁니다. 결과 자체는 종료 순간 M8 이 DB 에 저장합니다
 - **버려진 대기방 정리** (2026-10-03, 옛 §9-9)
   - 대기 중에 실시간 연결이 끊긴 참가자는 **15초**(`room.disconnect-grace-millis`) 뒤 자동 퇴장합니다. 그 안에 다시 `JOIN` 하면 취소됩니다
   - 입장·퇴장·준비가 **30분**(`room.waiting-timeout-millis`) 동안 없는 대기방은 상태 `CLOSED` 를 알리고 닫습니다
@@ -755,7 +755,6 @@ PlayerState
 | GET | `/api/rooms/{id}` | | 방 상태 (`tickIndex`, 판 시작 뒤 `labels`) |
 | POST | `/api/rooms/{id}/join` · `/leave` | `{userId}` | 입장 · 퇴장 |
 | POST | `/api/rooms/{id}/ready` | `{userId, ready}` | 준비. 전원 준비되면 시작 |
-| GET | `/api/rooms/{id}/result` | | 끝난 판의 순위·체결 내역·실제 종목 (임시, §9-7) |
 
 - 주문은 REST 에 없습니다 — `ORDER` 는 WebSocket 메시지입니다 (M7)
 - 오류는 `{"error": "사유"}` — 잘못된 요청 400, 없는 방 404, 지금 상태에서 불가 409
@@ -823,7 +822,7 @@ PlayerState
   - `TICK` — `tickIndex`, `totalTicks`, `remainingTicks`, `remainingMillis`, `prices`(라벨별 종가), `bars`(라벨별 OHLCV, **시각 없음**)
   - `PLAYER_STATE` — 현금, 총자산, 포지션(진입가·수량·증거금·배율·청산가·미실현손익·가치), 거래·청산 횟수. 시작 시 1번 + 매 틱
   - `RANKING` — 5틱(= 5초)마다. 순위는 엔진 최종 순위와 같은 규칙(총자산 내림차순, 동점 공동)
-  - `GAME_END` — `resultId` 는 지금 방 ID 입니다. `GET /api/rooms/{id}/result` 로 실제 종목을 봅니다 (§9-7)
+  - `GAME_END` — `resultId`(M8 이 저장한 `game_rooms.id`, 저장 실패면 `null`), `roomId`, 최종 순위. 결과 상세는 `GET /api/results/{resultId}`
 - 느린 연결은 전송 버퍼 한도(512KB)를 넘으면 그 연결만 포기합니다. 그 클라이언트 때문에 방 스레드(틱)가 멈추면 안 됩니다
 - 허용 출처는 로컬 개발용(`http://localhost:*`, `http://127.0.0.1:*`)입니다. 배포할 때 다시 정합니다
 
@@ -842,7 +841,23 @@ PlayerState
 - 게임 진행 중 어떤 쓰기도 (§1.2)
 
 **완료 판정**
-- 판이 끝나면 결과 화면에서 내 거래를 시간 순으로 볼 수 있다
+- 판이 끝나면 결과 화면에서 내 거래를 시간 순으로 볼 수 있다 — ✅ 2026-10-03
+
+**구현 (2026-10-03)**
+- **종료 시 한 번에** 저장합니다 (2026-10-03 결정). `RoomService` 가 판이 끝나는 순간 방 스레드에서 `GameRecorder` 를 부르고,
+  `GameRecordService` 가 `game_rooms`·`game_participants`·`trades` 를 한 트랜잭션에 INSERT 만 합니다. UPDATE 는 없습니다
+- 저장에 실패해도 게임은 끝난 것으로 처리합니다. 로그를 남기고 `GAME_END` 의 `resultId` 를 `null` 로 보냅니다
+- 봇은 `game_participants.user_id` 를 비우고 `is_bot = 1` 로 남깁니다. `users` 는 사람만 담습니다 (2026-10-03 결정)
+- 체결 내역의 `kind`(BUY / SELL / LIQUIDATION / SETTLEMENT) 하나로 §5 의 「매수/매도」와 「청산 여부」를 함께 담습니다.
+  `symbol_id` 로 라벨이 가린 실제 종목을 남깁니다. 금액은 엔진 계산 그대로 소수 8자리까지
+- 임시로 쓰던 메모리 결과와 `GET /api/rooms/{id}/result` 는 없앴습니다 (옛 §9-7)
+
+| 메서드 | 경로 | 설명 |
+|---|---|---|
+| GET | `/api/results/{gameId}` | 결과 상세 — 순위·수익률·청산 횟수, 체결 내역(시간 순), 실제 종목명 공개 |
+| GET | `/api/users/{userId}/results` | 사용자별 전적 — 최근 판부터 50판 (순위/인원, 최종 자산, 수익률, 시나리오 제목) |
+
+- P0: 게임 종료 화면 「결과 보기」에서 **내 거래(시간 순)**와 전체 체결, 로비 「내 전적」에서 지난 판을 다시 볼 수 있습니다
 
 ---
 
@@ -1110,7 +1125,6 @@ P0 (테스트 하네스, F0~F3)도 만들었습니다 (2026-10-03).
 | 9-3 | M1 「결손 구간만 호출」 미구현 | M1 | 구현 누락 (2026-09-24 발견) | 재실행하면 API 를 다시 부른다. 중복 행은 생기지 않는다 |
 | 9-4 | CSV 데이터 범위가 좁다 | M3 이후 | 토스 API 사용 불가 | 저장된 `data/samples` 만 사용 |
 | 9-6 | 개발용 시나리오 3개 | M3 | 정식 시나리오 선정 전 | 로컬 DB 에만 등록 (#8~#10) |
-| 9-7 | 게임 결과를 저장하지 않음 | M6 → M8 | M8 이 아직 없음 | 끝난 방 메모리에 10분 보관, `GET /api/rooms/{id}/result` |
 
 ### 9-1. `DbPriceDataProvider` 실데이터 검증 (2026-10-02)
 
@@ -1191,14 +1205,6 @@ done
 ```
 
 끝내는 방법: 토스 API 로 데이터를 넓힌 뒤 정식 시나리오를 골라 등록하고, 개발용은 지웁니다.
-
-### 9-7. 게임 결과를 저장하지 않음 (2026-10-03)
-
-- M8(결과·전적)이 아직 없어서, 끝난 판의 `GameResult`(순위·체결 내역)와 시나리오(실제 종목 공개)를
-  **방 객체에 10분간만** 들고 있다가 방과 함께 지웁니다. 서버를 내리면 사라집니다
-- 임시 조회 경로: `GET /api/rooms/{id}/result` — M8 의 `ResultController` 가 생기면 없앱니다
-- 끝내는 방법: M8 에서 `RoomEventListener.onGameFinished` 를 받아 `game_rooms` / `game_participants` / `trades` 를
-  한 트랜잭션에 일괄 INSERT 하고(§1.2 종료 시 쓰기), 결과 조회를 DB 로 옮깁니다
 
 ### 알려진 작은 문제
 
