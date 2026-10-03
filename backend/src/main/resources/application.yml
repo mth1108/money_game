@@ -53,9 +53,30 @@ room:
   allowed-ticks: [60, 120, 240]
   default-ticks: 240
 
+realtime:
+  # WebSocket 허용 출처. 로컬 개발 서버(P0)만 받는다. 배포할 때 다시 정한다
+  allowed-origins:
+    - http://localhost:*
+    - http://127.0.0.1:*
+
 logging:
   level:
     com.moneygame: INFO
+
+---
+# 임시 공개 — Cloudflare 임시 터널로 밖에서 접속하게 한다 (CLAUDE.md §4, §9-12). scripts/share.sh 가 켠다
+spring:
+  config:
+    activate:
+      on-profile: share
+server:
+  # 프론트(vite preview)의 프록시만 들어오게 한다. 같은 와이파이에서도 8080 에 직접 붙지 못한다
+  address: 127.0.0.1
+realtime:
+  allowed-origins:
+    - http://localhost:*
+    - http://127.0.0.1:*
+    - https://*.trycloudflare.com
 
 ---
 # 배치형 실행 — 시세 수집(collector), 시나리오 관리(scenario).

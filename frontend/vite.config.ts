@@ -12,4 +12,11 @@ export default defineConfig({
       '/ws': { target: 'ws://localhost:8080', ws: true },
     },
   },
+  // 임시 공개 (CLAUDE.md §4). 빌드 결과(dist)만 내보내고 프록시는 server.proxy 를 그대로 쓴다.
+  // 개발 서버는 소스를 내보내므로 터널에 물리지 않는다
+  preview: {
+    port: 4173,
+    strictPort: true,
+    allowedHosts: ['.trycloudflare.com'],
+  },
 })
