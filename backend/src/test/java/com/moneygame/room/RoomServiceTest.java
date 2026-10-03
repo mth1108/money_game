@@ -4,6 +4,7 @@ import com.moneygame.engine.GameResult;
 import com.moneygame.engine.OrderRequest;
 import com.moneygame.engine.OrderResult;
 import com.moneygame.engine.TickResult;
+import com.moneygame.engine.Trade;
 import com.moneygame.marketdata.Candle;
 import com.moneygame.marketdata.Interval;
 import com.moneygame.scenario.LoadedScenario;
@@ -27,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -454,12 +456,96 @@ class RoomServiceTest {
     @Test
     void 방마다_시드머니를_정할_수_있다() {
         RoomService rooms = service();
-        RoomSettings settings = RoomSettings.of(GameMode.DAILY, 1, null, new BigDecimal("5000000"));
+        RoomSettings settings = RoomSettings.of(GameMode.DAILY, 1, null, new BigDecimal("5000000"), 0);
         String id = rooms.create("1", "p1", settings).id();
         rooms.ready(id, "1", true);
 
         assertEquals(new BigDecimal("5000000"), recorder.starts.get(0).seedMoney());
         assertEquals(new BigDecimal("5000000"), recorder.starts.get(0).players().get("1").cash());
+    }
+
+    @Nested
+    @DisplayName("봇 (M9)")
+    class 봇 {
+
+        private RoomSettings withBots(int maxPlayers, int bots) {
+            return new RoomSettings(GameMode.DAILY, maxPlayers, null, RoomSettings.DEFAULT_SEED_MONEY, bots);
+        }
+
+        @Test
+        void 봇은_인원에_포함되고_항상_준비_상태다() {
+            RoomService rooms = service();
+            RoomView v = rooms.create("1", "p1", withBots(4, 2));
+
+            assertEquals(List.of("1", "bot-1", "bot-2"), v.participants().stream().map(RoomView.Participant::userId).toList());
+            assertEquals(List.of("존버봇1", "존버봇2"), v.participants().subList(1, 3).stream().map(RoomView.Participant::nickname).toList());
+            assertTrue(v.participants().subList(1, 3).stream().allMatch(p -> p.bot() && p.ready()));
+            assertFalse(v.participants().get(0).bot());
+
+            rooms.join(v.id(), "2", "p2");   // 4/4
+            assertThrows(IllegalStateException.class, () -> rooms.join(v.id(), "3", "p3"), "봇도 자리를 차지한다");
+        }
+
+        @Test
+        void 사람이_준비하면_시작하고_봇은_0틱에_종목마다_균등_매수_후_끝까지_보유한다() throws Exception {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", withBots(2, 1)).id();
+
+            assertEquals(RoomStatus.PLAYING, rooms.ready(id, "1", true).status(), "봇은 이미 준비돼 있다");
+            awaitFinish(id);
+
+            GameResult r = recorder.finished.get(id);
+            List<Trade> botTrades = r.trades().stream().filter(t -> t.userId().equals("bot-1")).toList();
+            assertEquals(List.of(Trade.Kind.BUY, Trade.Kind.BUY, Trade.Kind.SETTLEMENT, Trade.Kind.SETTLEMENT),
+                    botTrades.stream().map(Trade::kind).toList(), "0틱에 사고 판 종료 때까지 보유");
+            assertEquals(List.of(0, 0, 240, 240), botTrades.stream().map(Trade::tickIndex).toList());
+            assertTrue(botTrades.stream().allMatch(t -> t.leverage() == 1));
+            assertEquals(botTrades.get(0).margin(), botTrades.get(1).margin(), "두 종목에 같은 금액");
+            // 가짜 시나리오 1 은 두 종목 모두 두 배로 오른다 -> 봇이 이긴다
+            assertEquals("bot-1", r.rankings().get(0).userId());
+            assertEquals("존버봇", r.rankings().get(0).nickname());
+        }
+
+        @Test
+        void 순위에_봇과_사람이_나란히_나온다() throws Exception {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", withBots(2, 1)).id();
+            rooms.ready(id, "1", true);
+            awaitFinish(id);
+
+            assertEquals(2, recorder.finished.get(id).rankings().size());
+            assertEquals(Set.of("1", "bot-1"),
+                    recorder.finished.get(id).rankings().stream().map(GameResult.Rank::userId).collect(Collectors.toSet()));
+        }
+
+        @Test
+        void 기록에는_봇이_사용자_ID_없이_봇으로_표시된다() throws Exception {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", withBots(2, 1)).id();
+            rooms.ready(id, "1", true);
+            awaitFinish(id);
+
+            assertEquals(List.of(new FinishedGame.Player("1", 1L, "p1", false), new FinishedGame.Player("bot-1", null, "존버봇", true)),
+                    records.games.get(0).players());
+        }
+
+        @Test
+        void 사람이_모두_나가면_봇만_남은_방은_닫힌다() {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", withBots(4, 2)).id();
+
+            rooms.leave(id, "1");
+
+            assertThrows(NoSuchElementException.class, () -> rooms.view(id));
+        }
+
+        @Test
+        void 봇_수는_0에서_3_이고_사람_자리가_남아야_한다() {
+            assertThrows(IllegalArgumentException.class, () -> withBots(8, 4));
+            assertThrows(IllegalArgumentException.class, () -> withBots(2, 2), "만든 사람 자리가 없다");
+            assertThrows(IllegalArgumentException.class, () -> withBots(4, -1));
+            assertEquals(3, withBots(4, 3).bots());
+        }
     }
 
     @Nested
@@ -525,7 +611,7 @@ class RoomServiceTest {
         @Test
         void 판이_끝나면_한_번_기록하고_결과_ID_를_알린다() throws Exception {
             RoomService rooms = service();
-            String id = rooms.create("1", "p1", RoomSettings.of(GameMode.DAILY, 2, null, new BigDecimal("5000000"))).id();
+            String id = rooms.create("1", "p1", RoomSettings.of(GameMode.DAILY, 2, null, new BigDecimal("5000000"), 0)).id();
             rooms.join(id, "2", "p2");
             rooms.ready(id, "1", true);
             rooms.ready(id, "2", true);

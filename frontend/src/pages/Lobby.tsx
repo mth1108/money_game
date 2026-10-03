@@ -10,6 +10,7 @@ export function Lobby({ user, onEnterRoom }: { user: User; onEnterRoom: (roomId:
   const [maxPlayers, setMaxPlayers] = useState(4)
   const [scenarioId, setScenarioId] = useState('')
   const [seedMoney, setSeedMoney] = useState('100000000')
+  const [bots, setBots] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [openResult, setOpenResult] = useState<number | null>(null)
@@ -44,7 +45,7 @@ export function Lobby({ user, onEnterRoom }: { user: User; onEnterRoom: (roomId:
     try {
       const id = scenarioId.trim() === '' ? undefined : Number(scenarioId)
       const seed = seedMoney.trim() === '' ? undefined : seedMoney.trim()
-      const room = await api.createRoom(user.id, mode, maxPlayers, id, seed)
+      const room = await api.createRoom(user.id, mode, maxPlayers, id, seed, bots)
       onEnterRoom(room.id)
     } catch (err) {
       setError((err as Error).message)
@@ -71,6 +72,16 @@ export function Lobby({ user, onEnterRoom }: { user: User; onEnterRoom: (roomId:
         <label>
           시드머니 (비우면 1억) <input value={seedMoney} onChange={(e) => setSeedMoney(e.target.value)} inputMode="decimal" size={12} />
         </label>{' '}
+        <label>
+          존버 봇 (인원에 포함){' '}
+          <select value={bots} onChange={(e) => setBots(Number(e.target.value))}>
+            {[0, 1, 2, 3].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>{' '}
         <button type="submit">만들기</button>
       </form>
       {error && <p>오류: {error}</p>}
@@ -82,7 +93,7 @@ export function Lobby({ user, onEnterRoom }: { user: User; onEnterRoom: (roomId:
           <li key={r.id}>
             {r.id} · {r.mode} · {r.participants.length}/{r.maxPlayers}명 · 방장 {r.participants.find((p) => p.userId === r.hostUserId)?.nickname}
             {' · '}
-            {r.participants.map((p) => `${p.nickname}${p.ready ? '(준비)' : ''}`).join(', ')}{' '}
+            {r.participants.map((p) => `${p.nickname}${p.bot ? '(봇)' : p.ready ? '(준비)' : ''}`).join(', ')}{' '}
             <button onClick={() => onEnterRoom(r.id)}>입장</button>
           </li>
         ))}

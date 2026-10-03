@@ -276,6 +276,34 @@ class GameSocketIntegrationTest {
         assertEquals("1", last.at("/payload/participants/0/userId").asText());
     }
 
+    /** M9 완료 판정 — 「싱글 모드에서 봇과 순위가 나란히 표시된다」 */
+    @Test
+    void 혼자_하는_판에서_봇과_순위가_나란히_나온다() throws Exception {
+        String roomId = rooms.create("1", "철수", new RoomSettings(GameMode.DAILY, 2, null,
+                RoomSettings.DEFAULT_SEED_MONEY, 1)).id();
+        Client c = connect();
+        c.send("{\"type\":\"JOIN\",\"roomId\":\"" + roomId + "\",\"userId\":1}");
+        await(c.roomState, "ROOM_STATE");
+        JsonNode bot = c.of("ROOM_STATE").get(0).at("/payload/participants/1");
+        assertEquals("존버봇", bot.at("/nickname").asText());
+        assertTrue(bot.at("/bot").asBoolean() && bot.at("/ready").asBoolean(), "봇은 처음부터 준비 상태");
+
+        c.send("{\"type\":\"READY\",\"ready\":true}");
+        await(c.gameEnd, "GAME_END");
+
+        JsonNode firstRanking = c.of("RANKING").get(0).at("/payload/rankings");
+        List<String> names = new ArrayList<>();
+        firstRanking.forEach(r -> names.add(r.at("/nickname").asText()));
+        assertEquals(2, names.size());
+        assertTrue(names.containsAll(List.of("철수", "존버봇")), "순위에 봇과 사람이 함께: " + names);
+        JsonNode botEntry = names.indexOf("존버봇") == 0 ? firstRanking.get(0) : firstRanking.get(1);
+        assertEquals(2, botEntry.at("/positions").size(), "봇은 두 종목을 모두 들고 있다");
+        assertEquals(1, botEntry.at("/positions/0/leverage").asInt());
+
+        JsonNode end = c.of("GAME_END").get(0).at("/payload/rankings");
+        assertEquals(2, end.size());
+    }
+
     @Test
     void JOIN_전에_보낸_요청과_잘못된_메시지는_ERROR_로_답한다() throws Exception {
         Client c = connect();

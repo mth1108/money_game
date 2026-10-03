@@ -1,5 +1,7 @@
 package com.moneygame.room;
 
+import com.moneygame.bot.BotContext;
+import com.moneygame.bot.HoldBot;
 import com.moneygame.engine.GameSession;
 import com.moneygame.engine.OrderRequest;
 import com.moneygame.engine.OrderResult;
@@ -49,6 +51,9 @@ public class RoomService {
 
     private static final ZoneOffset KST = ZoneOffset.ofHours(9);
 
+    /** 봇의 플레이어 ID 접두어. 사람의 ID 는 users.id 숫자라 겹치지 않는다 */
+    static final String BOT_PREFIX = "bot-";
+
     private final ScenarioSource scenarios;
     private final GameRecorder recorder;
     private final Supplier<List<RoomEventListener>> listeners;
@@ -78,10 +83,14 @@ public class RoomService {
         RoomView view = call(room, () -> {
             room.participants.put(hostUserId, new Room.Participant(hostUserId, hostNickname));
             room.hostUserId = hostUserId;
+            for (int i = 1; i <= settings.bots(); i++) {
+                String name = settings.bots() == 1 ? HoldBot.NAME : HoldBot.NAME + i;
+                room.participants.put(BOT_PREFIX + i, new Room.Participant(BOT_PREFIX + i, name, new HoldBot()));
+            }
             return changed(room);
         });
-        log.info("방 생성 {} — {} / 최대 {}명 / 시나리오 {} / 시드 {} / 방장 {}", room.id, settings.mode(),
-                settings.maxPlayers(), settings.scenarioId() == null ? "무작위" : settings.scenarioId(),
+        log.info("방 생성 {} — {} / 최대 {}명 / 봇 {} / 시나리오 {} / 시드 {} / 방장 {}", room.id, settings.mode(),
+                settings.maxPlayers(), settings.bots(), settings.scenarioId() == null ? "무작위" : settings.scenarioId(),
                 settings.seedMoney().toPlainString(), hostNickname);
         return view;
     }
@@ -234,6 +243,8 @@ public class RoomService {
         room.session = session;
         room.status = RoomStatus.PLAYING;
         room.startedAt = LocalDateTime.now(KST);
+        // 봇은 0틱에 사람과 똑같이 주문한다 (M9). 시작 정보에 봇 포지션이 담기도록 먼저 넣는다
+        runBots(room, true);
         room.startInfo = new GameStartInfo(room.settings.mode(), session.symbolLabels(), bars(loaded, 0),
                 session.seedMoney(), session.allowedLeverages(), totalTicks, snapshots(session, prices(loaded, 0)));
 
@@ -258,6 +269,8 @@ public class RoomService {
             fire(l -> l.onTick(room.id, t, bars, players));
             if (t.finished()) {
                 finish(room);
+            } else {
+                runBots(room, false);
             }
         } catch (RuntimeException e) {
             // 예외가 새면 ScheduledExecutorService 가 조용히 틱을 멈춘다. 로그를 남기고 방을 닫는다
@@ -290,7 +303,8 @@ public class RoomService {
     private Long record(Room room) {
         List<FinishedGame.Player> players = new ArrayList<>();
         for (Room.Participant p : room.participants.values()) {
-            players.add(new FinishedGame.Player(p.userId, Long.valueOf(p.userId), p.nickname, false));
+            // 봇은 사용자 ID 없이 봇으로 표시한다 (2026-10-03 결정)
+            players.add(new FinishedGame.Player(p.userId, p.isBot() ? null : Long.valueOf(p.userId), p.nickname, p.isBot()));
         }
         FinishedGame game = new FinishedGame(room.id, room.settings.mode(), room.settings.seedMoney(),
                 room.session.totalTicks(), room.scenario.scenario(), room.startedAt, LocalDateTime.now(KST),
@@ -303,18 +317,44 @@ public class RoomService {
         }
     }
 
-    /** 참가자를 내보낸다. 마지막 사람이면 방을 닫고, 방장이면 다음 사람에게 넘긴다. */
+    /**
+     * 봇들의 주문을 엔진에 넣는다 — 사람 주문과 같은 submitOrder 경로다 (M9 「봇은 M4 입장에서 사람과 구분되지 않는다」).
+     * 봇에게는 연결이 없으므로 ORDER_RESULT 는 보내지 않는다.
+     */
+    private void runBots(Room room, boolean atStart) {
+        GameSession session = room.session;
+        Map<String, BigDecimal> prices = prices(room.scenario, session.tickIndex());
+        for (Room.Participant p : room.participants.values()) {
+            if (!p.isBot()) {
+                continue;
+            }
+            BotContext ctx = new BotContext(p.userId, session.tickIndex(),
+                    session.symbolLabels(), prices, session.player(p.userId).cash(), session.allowedLeverages());
+            List<OrderRequest> orders = atStart ? p.bot.onStart(ctx) : p.bot.onTick(ctx);
+            for (OrderRequest order : orders) {
+                OrderResult r = session.submitOrder(order);
+                if (!r.accepted()) {
+                    log.warn("봇 주문 거부 — 방 {} / {} / {} {}: {}", room.id, p.nickname, order.action(),
+                            order.symbolLabel(), r.reason());
+                }
+            }
+        }
+    }
+
+    /** 참가자를 내보낸다. 사람이 아무도 안 남으면 방을 닫고, 방장이면 다음 사람에게 넘긴다. */
     private RoomView removeParticipant(Room room, String userId, String reason) {
         Room.Participant p = room.participants.remove(userId);
         if (p != null) {
             cancelPendingLeave(p);
         }
-        if (room.participants.isEmpty()) {
-            close(room, "마지막 참가자 " + reason);
+        String nextHost = room.participants.values().stream().filter(x -> !x.isBot()).map(x -> x.userId)
+                .findFirst().orElse(null);
+        if (nextHost == null) {
+            close(room, "마지막 사람 " + reason);   // 봇만 남은 방은 의미가 없다
             return room.view();
         }
         if (userId.equals(room.hostUserId)) {
-            room.hostUserId = room.participants.keySet().iterator().next();
+            room.hostUserId = nextHost;
         }
         return changed(room);
     }

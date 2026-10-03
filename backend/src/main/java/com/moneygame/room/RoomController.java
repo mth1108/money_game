@@ -29,8 +29,12 @@ public class RoomController {
         this.users = users;
     }
 
-    /** @param seedMoney 선택. 비우면 1억 원. 정밀도를 지키려면 문자열로 보낸다 (§1.5) */
-    public record CreateRequest(Long userId, GameMode mode, Integer maxPlayers, Long scenarioId, BigDecimal seedMoney) {
+    /**
+     * @param seedMoney 선택. 비우면 1억 원. 정밀도를 지키려면 문자열로 보낸다 (§1.5)
+     * @param bots      선택. 존버 봇 수 0 ~ 3, 비우면 0 (M9)
+     */
+    public record CreateRequest(Long userId, GameMode mode, Integer maxPlayers, Long scenarioId, BigDecimal seedMoney,
+                                Integer bots) {
     }
 
     public record UserRequest(Long userId) {
@@ -48,7 +52,8 @@ public class RoomController {
     public RoomView create(@RequestBody CreateRequest request) {
         UserService.User user = user(request.userId());
         return rooms.create(user.userId(), user.nickname(),
-                RoomSettings.of(request.mode(), request.maxPlayers(), request.scenarioId(), request.seedMoney()));
+                RoomSettings.of(request.mode(), request.maxPlayers(), request.scenarioId(), request.seedMoney(),
+                        request.bots()));
     }
 
     @GetMapping("/{roomId}")

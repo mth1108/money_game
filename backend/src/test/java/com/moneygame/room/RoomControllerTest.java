@@ -40,7 +40,7 @@ class RoomControllerTest {
 
     private static RoomView waiting(String id) {
         return new RoomView(id, RoomStatus.WAITING, GameMode.DAILY, 4, "7",
-                List.of(new RoomView.Participant("7", "철수", false)), List.of(), -1, 0);
+                List.of(new RoomView.Participant("7", "철수", false, false)), List.of(), -1, 0);
     }
 
     @Test
@@ -82,6 +82,23 @@ class RoomControllerTest {
         verify(rooms, times(2)).create(eq("7"), eq("철수"), captor.capture());
         assertEquals(new BigDecimal("5000000"), captor.getAllValues().get(0).seedMoney());
         assertEquals(RoomSettings.DEFAULT_SEED_MONEY, captor.getAllValues().get(1).seedMoney());
+    }
+
+    @Test
+    void 봇_수를_보내면_방_설정에_들어가고_범위를_넘으면_400() throws Exception {
+        when(users.get(7)).thenReturn(new UserService.User(7, "철수"));
+        when(rooms.create(eq("7"), eq("철수"), any())).thenReturn(waiting("r1"));
+        ArgumentCaptor<RoomSettings> captor = ArgumentCaptor.forClass(RoomSettings.class);
+
+        mvc.perform(post("/api/rooms").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":7,\"mode\":\"DAILY\",\"maxPlayers\":2,\"bots\":1}"))
+                .andExpect(status().isOk());
+        verify(rooms).create(eq("7"), eq("철수"), captor.capture());
+        assertEquals(1, captor.getValue().bots());
+
+        mvc.perform(post("/api/rooms").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":7,\"mode\":\"DAILY\",\"maxPlayers\":4,\"bots\":4}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

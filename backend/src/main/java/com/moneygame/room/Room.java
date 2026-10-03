@@ -1,5 +1,6 @@
 package com.moneygame.room;
 
+import com.moneygame.bot.Bot;
 import com.moneygame.engine.GameResult;
 import com.moneygame.engine.GameSession;
 import com.moneygame.scenario.LoadedScenario;
@@ -49,13 +50,26 @@ final class Room {
     static final class Participant {
         final String userId;
         final String nickname;
+        /** 봇이면 그 전략. 사람이면 null */
+        final Bot bot;
         boolean ready;
         /** 대기 중 연결이 끊겨 예약된 자동 퇴장. 다시 접속하면 취소한다 */
         ScheduledFuture<?> pendingLeave;
 
         Participant(String userId, String nickname) {
+            this(userId, nickname, null);
+        }
+
+        /** 봇은 항상 준비 상태다 (2026-10-03 결정). */
+        Participant(String userId, String nickname, Bot bot) {
             this.userId = userId;
             this.nickname = nickname;
+            this.bot = bot;
+            this.ready = bot != null;
+        }
+
+        boolean isBot() {
+            return bot != null;
         }
     }
 
@@ -73,7 +87,7 @@ final class Room {
     RoomView view() {
         List<RoomView.Participant> list = new ArrayList<>();
         for (Participant p : participants.values()) {
-            list.add(new RoomView.Participant(p.userId, p.nickname, p.ready));
+            list.add(new RoomView.Participant(p.userId, p.nickname, p.ready, p.isBot()));
         }
         return new RoomView(id, status, settings.mode(), settings.maxPlayers(), hostUserId, List.copyOf(list),
                 session == null ? List.of() : session.symbolLabels(),

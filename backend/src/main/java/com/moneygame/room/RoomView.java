@@ -19,6 +19,7 @@ public record RoomView(String id,
                        int tickIndex,
                        int totalTicks) {
 
-    public record Participant(String userId, String nickname, boolean ready) {
+    /** @param bot 존버 봇이면 true. 봇은 항상 준비 상태다 */
+    public record Participant(String userId, String nickname, boolean ready, boolean bot) {
     }
 }

@@ -15,6 +15,8 @@ export interface Participant {
   userId: string
   nickname: string
   ready: boolean
+  /** 존버 봇이면 true. 봇은 항상 준비 상태다 (M9) */
+  bot: boolean
 }
 
 export interface RoomView {

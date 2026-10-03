@@ -59,7 +59,8 @@ export function Room({ user, roomId, onExit }: { user: User; roomId: string; onE
       <ul>
         {room?.participants.map((p) => (
           <li key={p.userId}>
-            {p.nickname} (userId {p.userId}){p.userId === room.hostUserId ? ' · 방장' : ''} · {p.ready ? '준비됨' : '대기'}
+            {p.nickname} {p.bot ? '(봇 · 0틱에 종목마다 균등 매수, 배율 1, 끝까지 보유)' : `(userId ${p.userId})`}
+            {p.userId === room.hostUserId ? ' · 방장' : ''} · {p.ready ? '준비됨' : '대기'}
             {p.userId === String(user.id) ? ' · 나' : ''}
           </li>
         ))}
