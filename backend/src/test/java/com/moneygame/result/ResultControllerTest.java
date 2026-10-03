@@ -40,7 +40,10 @@ class ResultControllerTest {
                 List.of(new ResultService.Participant("7", 7L, "철수", false, 1, new BigDecimal("69781505.88333333"),
                         new BigDecimal("-0.3022"), 1, 1)),
                 List.of(new ResultService.TradeRow(0, "7", "철수", false, "A", "005930", "삼성전자", "BUY", 1129,
-                        new BigDecimal("79700"), new BigDecimal("29993766.66666667"), 3, new BigDecimal("134971.9500")))));
+                        new BigDecimal("79700"), new BigDecimal("29993766.66666667"), 3, new BigDecimal("134971.9500"))),
+                List.of(new ResultService.SymbolChart("A", "005930", "삼성전자", List.of(new ResultService.ChartBar(
+                        LocalDateTime.of(2024, 5, 9, 0, 0), new BigDecimal("79500"), new BigDecimal("80100"),
+                        new BigDecimal("79200"), new BigDecimal("79700"), new BigDecimal("12345678")))))));
 
         mvc.perform(get("/api/results/1"))
                 .andExpect(status().isOk())
@@ -48,7 +51,10 @@ class ResultControllerTest {
                 .andExpect(jsonPath("$.participants[0].bot").value(false))
                 .andExpect(jsonPath("$.trades[0].symbolName").value("삼성전자"))
                 .andExpect(jsonPath("$.trades[0].margin").value("29993766.66666667"))
-                .andExpect(jsonPath("$.scenario.symbols[0].name").value("삼성전자"));
+                .andExpect(jsonPath("$.scenario.symbols[0].name").value("삼성전자"))
+                .andExpect(jsonPath("$.charts[0].name").value("삼성전자"))
+                .andExpect(jsonPath("$.charts[0].bars[0].time").value("2024-05-09T00:00:00"))
+                .andExpect(jsonPath("$.charts[0].bars[0].close").value("79700"));
     }
 
     @Test

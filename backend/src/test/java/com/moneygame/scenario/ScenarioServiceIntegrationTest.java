@@ -130,6 +130,65 @@ class ScenarioServiceIntegrationTest {
     }
 
     @Test
+    void 과거_봉은_시작_직전_N봉을_오래된_순으로_준다() {
+        Scenario s = register();   // 시작 DAY0 + 10 — 앞에 10봉이 있다
+
+        LoadedScenario loaded = service.load(s.id(), 5);
+
+        for (List<Candle> history : loaded.historyByLabel().values()) {
+            assertEquals(5, history.size());
+            assertEquals(DAY0.plusDays(5), history.get(0).timestamp().atZoneSameInstant(TestCandles.KST).toLocalDateTime());
+            assertEquals(DAY0.plusDays(9), history.get(4).timestamp().atZoneSameInstant(TestCandles.KST).toLocalDateTime());
+        }
+        assertEquals(241, loaded.candlesByLabel().get("A").size(), "판 봉은 그대로");
+    }
+
+    @Test
+    void 과거_봉이_모자라면_있는_만큼만_주고_0이면_읽지_않는다() {
+        Scenario s = register();
+
+        assertEquals(10, service.load(s.id(), 60).historyByLabel().get("B").size());
+        assertTrue(service.load(s.id()).historyByLabel().values().stream().allMatch(List::isEmpty));
+    }
+
+    @Test
+    void 분봉_과거_봉은_정규장_봉만_남기고_전날로_이어진다() throws IOException {
+        // 전날은 시간외 포함 08:01 ~ 20:00 (720봉), 당일은 정규장 09:01 ~ 15:20
+        LocalDateTime day1 = LocalDateTime.of(2024, 1, 2, 0, 0);
+        LocalDateTime day2 = day1.plusDays(1);
+        List<Candle> candles = new java.util.ArrayList<>();
+        for (LocalDateTime t = day1.withHour(8).withMinute(1); !t.isAfter(day1.withHour(20)); t = t.plusMinutes(1)) {
+            candles.add(TestCandles.candle(t, "10000", "1000"));
+        }
+        for (LocalDateTime t = day2.withHour(9).withMinute(1); !t.isAfter(day2.withHour(15).withMinute(20)); t = t.plusMinutes(1)) {
+            candles.add(TestCandles.candle(t, "10000", "1000"));
+        }
+        TestCandles.writeCsv(dir, "ZZSA", "1m", candles);
+        LocalDateTime start = day2.withHour(9).withMinute(4);
+        Long scenarioId = insertScenario(Interval.ONE_MINUTE, start, start.plusMinutes(240), "ZZSA");
+
+        List<Candle> history = service.load(scenarioId, 60).historyByLabel().get("A");
+
+        assertEquals(60, history.size());
+        assertEquals(day1.withHour(14).withMinute(24), kst(history.get(0)), "전날 정규장 끝 57봉 + 당일 3봉");
+        assertEquals(day1.withHour(15).withMinute(20), kst(history.get(56)), "15:21 이후·시간외는 뺀다");
+        assertEquals(day2.withHour(9).withMinute(3), kst(history.get(59)));
+    }
+
+    private Long insertScenario(Interval interval, LocalDateTime start, LocalDateTime end, String code) {
+        jdbc.update("INSERT INTO scenarios (title, bar_interval, start_ts, end_ts, bar_count, created_at) "
+                + "VALUES ('테스트', ?, ?, ?, 241, NOW())", interval.code(), start, end);
+        Long id = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
+        jdbc.update("INSERT INTO scenario_symbols (scenario_id, label, symbol_id) VALUES (?, 'A', ?)",
+                id, symbols.findByCode(code).orElseThrow().getId());
+        return id;
+    }
+
+    private static LocalDateTime kst(Candle c) {
+        return c.timestamp().atZoneSameInstant(TestCandles.KST).toLocalDateTime();
+    }
+
+    @Test
     void 뉴스가_없으면_빈_맵이다() {
         assertTrue(service.load(register().id()).newsByTick().isEmpty());
     }

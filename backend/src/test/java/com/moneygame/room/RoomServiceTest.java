@@ -47,7 +47,7 @@ class RoomServiceTest {
 
     private static final ZoneOffset KST = ZoneOffset.ofHours(9);
     /** 틱 2ms, 결과 보관 300ms, 끊김 유예 150ms, 대기방 만료 10초 */
-    private static final RoomProperties FAST = new RoomProperties(2, 300, 3000, 150, 10_000, List.of(60, 120, 240), 240);
+    private static final RoomProperties FAST = new RoomProperties(2, 300, 3000, 150, 10_000, List.of(60, 120, 240), 240, 0);
 
     private final Recorder recorder = new Recorder();
     private final Records records = new Records();
@@ -369,7 +369,7 @@ class RoomServiceTest {
 
         @Test
         void 활동_없는_대기방은_CLOSED_를_알리고_닫힌다() throws Exception {
-            RoomService rooms = service((mode, sid, minBars) -> scenario(1), new RoomProperties(2, 300, 3000, 150, 200, List.of(60, 120, 240), 240));
+            RoomService rooms = service((mode, sid, minBars) -> scenario(1), new RoomProperties(2, 300, 3000, 150, 200, List.of(60, 120, 240), 240, 0));
             String id = rooms.create("1", "p1", daily(4, null)).id();
 
             Thread.sleep(450);
@@ -380,7 +380,7 @@ class RoomServiceTest {
 
         @Test
         void 활동이_있으면_만료가_미뤄진다() throws Exception {
-            RoomService rooms = service((mode, sid, minBars) -> scenario(1), new RoomProperties(2, 300, 3000, 150, 400, List.of(60, 120, 240), 240));
+            RoomService rooms = service((mode, sid, minBars) -> scenario(1), new RoomProperties(2, 300, 3000, 150, 400, List.of(60, 120, 240), 240, 0));
             String id = rooms.create("1", "p1", daily(4, null)).id();
 
             Thread.sleep(250);
@@ -429,6 +429,11 @@ class RoomServiceTest {
             assertEquals(1, info.players().get("1").positions().size(), "주문한 포지션이 보인다");
             assertEquals(info.prices().get("A"), info.bars().get("A").close());
             assertEquals(List.of("room-" + id), threads);
+            // 다시 그릴 차트 재료 — 1틱부터 지금 틱까지
+            assertEquals(info.tickIndex(), info.playedBars().get("A").size());
+            if (info.tickIndex() > 0) {
+                assertEquals(info.bars().get("A"), info.playedBars().get("A").get(info.tickIndex() - 1));
+            }
         }
 
         @Test
@@ -443,6 +448,20 @@ class RoomServiceTest {
 
             assertEquals(240, got.get(0).tickIndex());
             assertEquals(1, got.get(0).result().rankings().size());
+            List<Bar> played = got.get(0).playedBars().get("B");
+            assertEquals(240, played.size(), "1 ~ 240틱");
+            assertEquals(0, new BigDecimal("20000").compareTo(played.get(239).close()));
+        }
+
+        @Test
+        void 대기_중이면_봉이_없다() {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", daily(4, null)).id();
+            List<ResumeInfo> got = new ArrayList<>();
+
+            rooms.resume(id, "1", got::add);
+
+            assertTrue(got.get(0).playedBars().isEmpty());
         }
 
         @Test
@@ -450,6 +469,46 @@ class RoomServiceTest {
             RoomService rooms = service();
             String id = rooms.create("1", "p1", daily(4, null)).id();
             assertThrows(IllegalArgumentException.class, () -> rooms.resume(id, "9", info -> { }));
+        }
+    }
+
+    @Nested
+    @DisplayName("과거 봉 — 차트 배경 (§8 2026-10-03)")
+    class 과거_봉 {
+
+        @Test
+        void 시작_정보에_라벨별_과거_봉이_오래된_순으로_담긴다() {
+            LoadedScenario base = scenario(1);
+            Map<String, List<Candle>> history = new LinkedHashMap<>();
+            for (String label : List.of("A", "B")) {
+                List<Candle> list = new ArrayList<>();
+                for (int i = 3; i >= 1; i--) {
+                    BigDecimal close = BigDecimal.valueOf(9000 + 100L * (3 - i));
+                    list.add(new Candle(LocalDateTime.of(2024, 1, 1, 0, 0).minusDays(i).atOffset(KST),
+                            close, close, close, close, BigDecimal.ONE));
+                }
+                history.put(label, list);
+            }
+            LoadedScenario withHistory = new LoadedScenario(base.scenario(), base.candlesByLabel(), history, Map.of());
+            RoomService rooms = service((mode, sid, minBars) -> withHistory);
+            String id = rooms.create("1", "p1", daily(1, null)).id();
+
+            rooms.ready(id, "1", true);
+
+            List<Bar> a = recorder.starts.get(0).history().get("A");
+            assertEquals(3, a.size());
+            assertEquals(0, new BigDecimal("9000").compareTo(a.get(0).close()));
+            assertEquals(0, new BigDecimal("9200").compareTo(a.get(2).close()), "마지막이 시작 직전 봉");
+        }
+
+        @Test
+        void 과거_봉이_없으면_라벨마다_빈_목록이다() {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", daily(1, null)).id();
+
+            rooms.ready(id, "1", true);
+
+            assertEquals(Map.of("A", List.of(), "B", List.of()), recorder.starts.get(0).history());
         }
     }
 

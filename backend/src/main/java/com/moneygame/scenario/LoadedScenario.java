@@ -3,6 +3,7 @@ package com.moneygame.scenario;
 import com.moneygame.marketdata.Candle;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,11 +15,20 @@ import java.util.Map;
  * 판이 도는 동안에는 이 값만 쓴다. DB·파일을 다시 읽지 않는다 (§1.2).
  *
  * @param candlesByLabel 라벨별 241봉. 모든 라벨의 i 번째 봉은 같은 시각이다
- * @param newsByTick     틱별 헤드라인. 지금은 비어 있다 (뉴스 생성 방식은 S6 에서 정한다)
+ * @param historyByLabel 라벨별 시작 전 과거 봉 (오래된 순). 차트 배경용이라 엔진은 쓰지 않는다 (§8, 2026-10-03).
+ *                       데이터가 모자라면 요청보다 적다
+ * @param newsByTick     틱별 헤드라인. 지금은 비어 있다 (뉴스는 보류, §8 2026-10-03)
  */
 public record LoadedScenario(Scenario scenario,
                              Map<String, List<Candle>> candlesByLabel,
+                             Map<String, List<Candle>> historyByLabel,
                              Map<Integer, List<String>> newsByTick) {
+
+    /** 과거 봉 없이. */
+    public LoadedScenario(Scenario scenario, Map<String, List<Candle>> candlesByLabel,
+                          Map<Integer, List<String>> newsByTick) {
+        this(scenario, candlesByLabel, Collections.emptyMap(), newsByTick);
+    }
 
     /**
      * 엔진에 넘길 라벨별 종가 배열. GameSession 은 marketdata 를 모르므로

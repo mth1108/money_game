@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -36,6 +37,12 @@ public class ScenarioService {
     /** 「조회 가능한 전 구간」을 읽을 때 쓰는 경계. 일봉 최장 1975년부터다 (§3 M1). */
     private static final LocalDateTime BEGINNING = LocalDateTime.of(1970, 1, 1, 0, 0);
     private static final LocalDateTime FAR_FUTURE = LocalDateTime.of(2100, 1, 1, 0, 0);
+
+    /** 분봉 정규장 하루 봉 수 (09:01 ~ 15:20). 과거 봉을 읽을 범위를 어림하는 데만 쓴다 */
+    private static final int REGULAR_BARS_PER_DAY = 380;
+
+    /** 과거 봉을 읽을 때 주말·연휴를 감안해 더 거슬러 올라가는 날 수 (추석 연휴 + 주말) */
+    private static final int HISTORY_SLACK_DAYS = 14;
 
     private final ScenarioRepository scenarios;
     private final ScenarioSymbolRepository scenarioSymbols;
@@ -82,14 +89,23 @@ public class ScenarioService {
         return Optional.of(toScenario(pool.get(random.nextInt(pool.size()))));
     }
 
+    /** 과거 봉 없이 읽는다. */
+    @Transactional(readOnly = true)
+    public LoadedScenario load(long id) {
+        return load(id, 0);
+    }
+
     /**
      * 판 시작 시 한 번 부른다. 라벨별 241봉과 뉴스를 읽어 메모리에 올린다 (§1.2).
      * 봉 수나 시각이 어긋나면 판을 시작하지 않는다 — 틱마다 종목별 날짜가 달라진다.
+     *
+     * @param historyBars 라벨마다 함께 읽을 시작 전 과거 봉 수 (차트 배경). 0 이면 읽지 않는다
      */
     @Transactional(readOnly = true)
-    public LoadedScenario load(long id) {
+    public LoadedScenario load(long id, int historyBars) {
         Scenario scenario = get(id);
         Map<String, List<Candle>> candles = new LinkedHashMap<>();
+        Map<String, List<Candle>> history = new LinkedHashMap<>();
         for (Scenario.ScenarioSymbol s : scenario.symbols()) {
             List<Candle> c = prices.getCandles(s.code(), scenario.interval(), scenario.start(), scenario.end());
             if (c.size() != scenario.barCount()) {
@@ -97,6 +113,7 @@ public class ScenarioService {
                         + scenario.barCount() + " 이 아닙니다: " + c.size());
             }
             candles.put(s.label(), c);
+            history.put(s.label(), history(s.code(), scenario.interval(), scenario.start(), historyBars));
         }
         requireAligned(candles);
 
@@ -105,7 +122,44 @@ public class ScenarioService {
             news.computeIfAbsent(e.getTickIndex(), k -> new ArrayList<>()).add(e.getHeadline());
         }
         news.replaceAll((tick, headlines) -> List.copyOf(headlines));
-        return new LoadedScenario(scenario, Collections.unmodifiableMap(candles), Collections.unmodifiableMap(news));
+        return new LoadedScenario(scenario, Collections.unmodifiableMap(candles), Collections.unmodifiableMap(history),
+                Collections.unmodifiableMap(news));
+    }
+
+    /**
+     * 시작 시각 직전의 봉 count 개 (오래된 순). 데이터가 모자라면 있는 만큼만 돌려준다.
+     * 분봉은 시나리오와 같은 정규장(09:01 ~ 15:20) 봉만 남긴다. 장 초반에 시작하면 전날 봉이 이어진다 —
+     * 배경용이라 오버나이트 갭이 섞여도 괜찮다 (§8, 2026-10-03).
+     */
+    private List<Candle> history(String code, Interval interval, LocalDateTime start, int count) {
+        if (count <= 0) {
+            return List.of();
+        }
+        LocalDateTime from = interval == Interval.ONE_MINUTE
+                ? start.minusDays(count / REGULAR_BARS_PER_DAY + HISTORY_SLACK_DAYS)
+                : start.minusDays(count * 2L + HISTORY_SLACK_DAYS);
+        List<Candle> before = prices.getCandles(code, interval, from, start.minusSeconds(1));
+        if (interval == Interval.ONE_MINUTE) {
+            before = before.stream().filter(c -> isRegularSession(kst(c.timestamp()).toLocalTime())).toList();
+        }
+        return List.copyOf(before.subList(Math.max(0, before.size() - count), before.size()));
+    }
+
+    /**
+     * 시나리오가 쓴 실제 시세. 결과 화면 차트용이다 — 판이 끝난 뒤 조회할 때만 부른다 (§1.2).
+     * 라벨 순서는 시나리오 순서다.
+     */
+    @Transactional(readOnly = true)
+    public Map<String, List<Candle>> candles(Scenario scenario, LocalDateTime from, LocalDateTime to) {
+        Map<String, List<Candle>> map = new LinkedHashMap<>();
+        for (Scenario.ScenarioSymbol s : scenario.symbols()) {
+            map.put(s.label(), prices.getCandles(s.code(), scenario.interval(), from, to));
+        }
+        return map;
+    }
+
+    private static boolean isRegularSession(LocalTime t) {
+        return !t.isBefore(ScenarioRules.REGULAR_FIRST_BAR) && !t.isAfter(ScenarioRules.REGULAR_LAST_BAR);
     }
 
     /** 후보 추출용. 종목별로 조회 가능한 전 구간을 읽는다. */

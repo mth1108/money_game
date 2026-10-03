@@ -153,7 +153,7 @@ public class GameSocketHandler extends TextWebSocketHandler implements RoomEvent
             return;
         }
         totalTicks.put(roomId, start.totalTicks());
-        send(session, gameStartMessage(start));
+        send(session, gameStartMessage(start, info.playedBars()));
         if (info.tickIndex() > 0) {
             send(session, tickMessage(roomId, info.tickIndex(), info.prices(), info.bars()));
         }
@@ -238,7 +238,7 @@ public class GameSocketHandler extends TextWebSocketHandler implements RoomEvent
     @Override
     public void onGameStarted(String roomId, GameStartInfo start) {
         totalTicks.put(roomId, start.totalTicks());
-        broadcast(roomId, gameStartMessage(start));
+        broadcast(roomId, gameStartMessage(start, Map.of()));
         start.players().forEach((userId, p) ->
                 sendTo(roomId, userId, ServerMessage.of(ServerMessage.Type.PLAYER_STATE, p)));
     }
@@ -278,9 +278,10 @@ public class GameSocketHandler extends TextWebSocketHandler implements RoomEvent
                 new ServerMessage.GameEnd(resultId, roomId, result.rankings())));
     }
 
-    private ServerMessage gameStartMessage(GameStartInfo start) {
+    private ServerMessage gameStartMessage(GameStartInfo start, Map<String, List<Bar>> playedBars) {
         return ServerMessage.of(ServerMessage.Type.GAME_START, new ServerMessage.GameStart(
-                start.mode(), start.labels(), start.initialBars(), start.seedMoney(), start.leverages(),
+                start.mode(), start.labels(), start.history(), start.initialBars(), playedBars,
+                start.seedMoney(), start.leverages(),
                 start.totalTicks(), properties.tickMillis()));
     }
 

@@ -12,10 +12,12 @@ import java.util.SplittableRandom;
 public class ScenarioServiceSource implements ScenarioSource {
 
     private final ScenarioService scenarios;
+    private final RoomProperties properties;
     private final SplittableRandom random = new SplittableRandom();
 
-    public ScenarioServiceSource(ScenarioService scenarios) {
+    public ScenarioServiceSource(ScenarioService scenarios, RoomProperties properties) {
         this.scenarios = scenarios;
+        this.properties = properties;
     }
 
     @Override
@@ -31,7 +33,7 @@ public class ScenarioServiceSource implements ScenarioSource {
             throw new IllegalStateException("시나리오 " + scenario.id() + " 는 " + scenario.barCount()
                     + "봉이라 " + (minBars - 1) + "틱 판을 돌 수 없습니다");
         }
-        return scenarios.load(scenario.id());
+        return scenarios.load(scenario.id(), properties.historyBars());
     }
 
     private Scenario pick(GameMode mode, int minBars) {

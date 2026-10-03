@@ -15,6 +15,7 @@ import java.util.List;
  * @param allowedTicks            방 만들 때 고를 수 있는 판 길이(틱). 늘리려면 설정만 바꾸면 된다 —
  *                                시나리오 봉 수가 「틱 + 1」 이상이면 그 길이로 돌 수 있다
  * @param defaultTicks            판 길이를 고르지 않았을 때. allowedTicks 안에 있어야 한다
+ * @param historyBars             GAME_START 로 보내는 시작 전 과거 봉 수 (차트 배경, §8 2026-10-03). 0 이면 보내지 않는다
  */
 @ConfigurationProperties(prefix = "room")
 public record RoomProperties(long tickMillis,
@@ -23,11 +24,12 @@ public record RoomProperties(long tickMillis,
                              long disconnectGraceMillis,
                              long waitingTimeoutMillis,
                              List<Integer> allowedTicks,
-                             int defaultTicks) {
+                             int defaultTicks,
+                             int historyBars) {
 
     public RoomProperties {
         if (tickMillis <= 0 || finishedRetentionMillis < 0 || callTimeoutMillis <= 0
-                || disconnectGraceMillis < 0 || waitingTimeoutMillis <= 0) {
+                || disconnectGraceMillis < 0 || waitingTimeoutMillis <= 0 || historyBars < 0) {
             throw new IllegalArgumentException("room.* 설정이 잘못됐습니다");
         }
         if (allowedTicks == null || allowedTicks.isEmpty() || allowedTicks.stream().anyMatch(t -> t == null || t < 1)) {

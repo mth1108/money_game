@@ -219,13 +219,13 @@ public class RoomService {
         call(room, () -> {
             requireParticipant(room, userId);
             if (room.session == null) {
-                action.accept(new ResumeInfo(room.view(), null, -1, Map.of(), Map.of(), Map.of(), null, null));
+                action.accept(new ResumeInfo(room.view(), null, -1, Map.of(), Map.of(), Map.of(), Map.of(), null, null));
                 return null;
             }
             int tick = room.session.tickIndex();
             Map<String, BigDecimal> prices = prices(room.scenario, tick);
-            action.accept(new ResumeInfo(room.view(), room.startInfo, tick, prices, bars(room.scenario, tick),
-                    snapshots(room.session, prices), room.result, room.resultId));
+            action.accept(new ResumeInfo(room.view(), room.startInfo, tick, playedBars(room.scenario, tick), prices,
+                    bars(room.scenario, tick), snapshots(room.session, prices), room.result, room.resultId));
             return null;
         });
     }
@@ -255,7 +255,7 @@ public class RoomService {
         room.startedAt = LocalDateTime.now(KST);
         // 봇은 0틱에 사람과 똑같이 주문한다 (M9). 시작 정보에 봇 포지션이 담기도록 먼저 넣는다
         runBots(room, true);
-        room.startInfo = new GameStartInfo(room.settings.mode(), session.symbolLabels(), bars(loaded, 0),
+        room.startInfo = new GameStartInfo(room.settings.mode(), session.symbolLabels(), history(loaded), bars(loaded, 0),
                 session.seedMoney(), session.allowedLeverages(), totalTicks, snapshots(session, prices(loaded, 0)));
 
         log.info("게임 시작 {} — 시나리오 #{} / {}명 / {}틱", room.id, loaded.scenario().id(),
@@ -428,6 +428,22 @@ public class RoomService {
         Map<String, Bar> bars = new LinkedHashMap<>();
         loaded.candlesByLabel().forEach((label, candles) -> bars.put(label, Bar.of(candles.get(tickIndex))));
         return bars;
+    }
+
+    /** 라벨별 시작 전 과거 봉. 시나리오에 없는 라벨은 빈 목록이다 */
+    private static Map<String, List<Bar>> history(LoadedScenario loaded) {
+        Map<String, List<Bar>> map = new LinkedHashMap<>();
+        loaded.candlesByLabel().keySet().forEach(label -> map.put(label,
+                loaded.historyByLabel().getOrDefault(label, List.of()).stream().map(Bar::of).toList()));
+        return map;
+    }
+
+    /** 라벨별 1틱 ~ tickIndex 봉 (재접속용) */
+    private static Map<String, List<Bar>> playedBars(LoadedScenario loaded, int tickIndex) {
+        Map<String, List<Bar>> map = new LinkedHashMap<>();
+        loaded.candlesByLabel().forEach((label, candles) ->
+                map.put(label, candles.subList(1, tickIndex + 1).stream().map(Bar::of).toList()));
+        return map;
     }
 
     private static Map<String, BigDecimal> prices(LoadedScenario loaded, int tickIndex) {

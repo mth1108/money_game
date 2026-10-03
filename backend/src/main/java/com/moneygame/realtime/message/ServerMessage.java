@@ -47,9 +47,14 @@ public record ServerMessage(Type type, Object payload) {
     // ── payload ──
 
     /**
-     * @param initialBars 0틱 캔들. 시각은 없다 — 라벨이 가린 종목을 날짜로 알아내지 못하게 한다
+     * 캔들에는 시각이 없다 — 라벨이 가린 종목을 날짜로 알아내지 못하게 한다.
+     *
+     * @param history     라벨별 시작 전 과거 봉 (오래된 순). 차트 배경이다 (§8 2026-10-03)
+     * @param initialBars 0틱 캔들
+     * @param playedBars  라벨별 1틱 ~ 지금 틱 봉. 재접속 때만 채우고, 처음 시작이면 비어 있다
      */
-    public record GameStart(GameMode mode, List<String> labels, Map<String, Bar> initialBars,
+    public record GameStart(GameMode mode, List<String> labels, Map<String, List<Bar>> history,
+                            Map<String, Bar> initialBars, Map<String, List<Bar>> playedBars,
                             BigDecimal seedMoney, Set<Integer> leverages, int totalTicks, long tickMillis) {
     }
 
