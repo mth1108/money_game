@@ -1,23 +1,41 @@
 // 탭마다 따로 기억한다 (sessionStorage). 같은 PC 에서 탭 두 개로 두 사람을 테스트할 수 있게 하려는 것이다.
+// 들어간 방도 기억해서 새로고침하면 그 방으로 돌아간다 — 서버가 현재 게임 상태를 다시 보내 준다 (§9-8).
 // 저장소를 못 쓰는 환경(사생활 보호 모드 등)에서도 화면은 동작해야 하므로 실패는 무시한다.
 import type { User } from './api/types'
 
-const KEY = 'moneygame.user'
+const USER_KEY = 'moneygame.user'
+const ROOM_KEY = 'moneygame.roomId'
 
-export function loadUser(): User | null {
+function read(key: string): string | null {
   try {
-    const raw = sessionStorage.getItem(KEY)
-    return raw ? (JSON.parse(raw) as User) : null
+    return sessionStorage.getItem(key)
   } catch {
     return null
   }
 }
 
-export function saveUser(user: User | null): void {
+function write(key: string, value: string | null): void {
   try {
-    if (user) sessionStorage.setItem(KEY, JSON.stringify(user))
-    else sessionStorage.removeItem(KEY)
+    if (value === null) sessionStorage.removeItem(key)
+    else sessionStorage.setItem(key, value)
   } catch {
     // 저장하지 못해도 이번 탭에서는 계속 쓸 수 있다
   }
+}
+
+export function loadUser(): User | null {
+  const raw = read(USER_KEY)
+  return raw ? (JSON.parse(raw) as User) : null
+}
+
+export function saveUser(user: User | null): void {
+  write(USER_KEY, user ? JSON.stringify(user) : null)
+}
+
+export function loadRoomId(): string | null {
+  return read(ROOM_KEY)
+}
+
+export function saveRoomId(roomId: string | null): void {
+  write(ROOM_KEY, roomId)
 }

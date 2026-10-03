@@ -2,6 +2,7 @@ package com.moneygame.collector;
 
 import com.moneygame.marketdata.Candle;
 import com.moneygame.marketdata.Interval;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedWriter;
@@ -24,6 +25,7 @@ import java.util.List;
  * 행은 시간 오름차순으로 쓰지만, 읽는 쪽은 파일 순서를 믿지 말고 정렬해야 한다.
  */
 @Component
+@Profile("collector")
 public class CsvCandleWriter {
 
     public static final String HEADER = "timestamp,open,high,low,close,volume";

@@ -71,20 +71,20 @@ public class RoomService {
         RoomView view = call(room, () -> {
             room.participants.put(hostUserId, new Room.Participant(hostUserId, hostNickname));
             room.hostUserId = hostUserId;
-            return room.view();
+            return changed(room);
         });
-        log.info("방 생성 {} — {} / 최대 {}명 / 시나리오 {} / 방장 {}", room.id, settings.mode(),
-                settings.maxPlayers(), settings.scenarioId() == null ? "무작위" : settings.scenarioId(), hostNickname);
-        fire(l -> l.onRoomChanged(view));
+        log.info("방 생성 {} — {} / 최대 {}명 / 시나리오 {} / 시드 {} / 방장 {}", room.id, settings.mode(),
+                settings.maxPlayers(), settings.scenarioId() == null ? "무작위" : settings.scenarioId(),
+                settings.seedMoney().toPlainString(), hostNickname);
         return view;
     }
 
     /** 대기 중인 방. 오래된 순. */
     public List<RoomView> list() {
-        List<Room> waiting = new ArrayList<>(rooms.values());
-        waiting.sort(Comparator.comparing(r -> r.createdAt));
+        List<Room> all = new ArrayList<>(rooms.values());
+        all.sort(Comparator.comparing(r -> r.createdAt));
         List<RoomView> views = new ArrayList<>();
-        for (Room room : waiting) {
+        for (Room room : all) {
             try {
                 RoomView v = call(room, room::view);
                 if (v.status() == RoomStatus.WAITING) {
@@ -102,10 +102,13 @@ public class RoomService {
         return call(room, room::view);
     }
 
+    /** 대기 중이면 입장한다. 이미 참가자면 그대로 돌려준다 — 재접속이면 예약된 자동 퇴장을 취소한다. */
     public RoomView join(String roomId, String userId, String nickname) {
         Room room = find(roomId);
         return call(room, () -> {
-            if (room.participants.containsKey(userId)) {
+            Room.Participant existing = room.participants.get(userId);
+            if (existing != null) {
+                cancelPendingLeave(existing);
                 return room.view();
             }
             requireWaiting(room, "이미 시작한 방입니다");
@@ -123,15 +126,7 @@ public class RoomService {
         return call(room, () -> {
             requireWaiting(room, "진행 중에는 나갈 수 없습니다. 남은 포지션은 종료 시 정리됩니다");
             requireParticipant(room, userId);
-            room.participants.remove(userId);
-            if (room.participants.isEmpty()) {
-                close(room, "마지막 참가자 퇴장");
-                return room.view();
-            }
-            if (userId.equals(room.hostUserId)) {
-                room.hostUserId = room.participants.keySet().iterator().next();
-            }
-            return changed(room);
+            return removeParticipant(room, userId, "퇴장");
         });
     }
 
@@ -157,6 +152,29 @@ public class RoomService {
         });
     }
 
+    /**
+     * 참가자의 실시간 연결이 끊겼다 (M7 이 알린다). 대기 중이면 유예 뒤 자동으로 내보낸다.
+     * 그 안에 다시 JOIN 하면 취소된다. 진행 중이면 아무것도 하지 않는다 — 포지션은 종료 시 정리된다 (§9-9).
+     */
+    public void disconnected(String roomId, String userId) {
+        Room room = rooms.get(roomId);
+        if (room == null) {
+            return;
+        }
+        try {
+            call(room, () -> {
+                Room.Participant p = room.participants.get(userId);
+                if (room.status == RoomStatus.WAITING && p != null && p.pendingLeave == null) {
+                    p.pendingLeave = room.executor.schedule(() -> autoLeave(room, userId),
+                            properties.disconnectGraceMillis(), TimeUnit.MILLISECONDS);
+                }
+                return null;
+            });
+        } catch (NoSuchElementException ignored) {
+            // 그사이 방이 닫혔다
+        }
+    }
+
     // ───────────────────────────── 게임 ─────────────────────────────
 
     /** 주문을 방의 실행 흐름에 넣는다. 틱과 섞이지 않고 순서대로 처리된다 (§1.6). */
@@ -168,6 +186,26 @@ public class RoomService {
                     : room.session.submitOrder(order);
             fire(l -> l.onOrderResult(room.id, order.userId(), result));
             return result;
+        });
+    }
+
+    /**
+     * 재접속한 참가자에게 방의 현재 모습을 넘긴다 (§9-8). action 은 방 스레드 안에서 돈다 —
+     * 그동안 틱이 끼어들지 않으므로, action 안에서 연결을 등록하고 다시 보내면 순서가 섞이지 않는다.
+     */
+    public void resume(String roomId, String userId, Consumer<ResumeInfo> action) {
+        Room room = find(roomId);
+        call(room, () -> {
+            requireParticipant(room, userId);
+            if (room.session == null) {
+                action.accept(new ResumeInfo(room.view(), null, -1, Map.of(), Map.of(), Map.of(), null));
+                return null;
+            }
+            int tick = room.session.tickIndex();
+            Map<String, BigDecimal> prices = prices(room.scenario, tick);
+            action.accept(new ResumeInfo(room.view(), room.startInfo, tick, prices, bars(room.scenario, tick),
+                    snapshots(room.session, prices), room.result));
+            return null;
         });
     }
 
@@ -191,18 +229,21 @@ public class RoomService {
                 room.settings.seedMoney(), room.settings.mode().leverages(), totalTicks, loaded.newsByTick());
         for (Room.Participant p : room.participants.values()) {
             session.addPlayer(p.userId, p.nickname);
+            cancelPendingLeave(p);
         }
         session.start();
+        cancel(room.waitingExpiry);
 
         room.scenario = loaded;
         room.session = session;
         room.status = RoomStatus.PLAYING;
-
-        GameStartInfo info = new GameStartInfo(room.settings.mode(), session.symbolLabels(), bars(loaded, 0),
+        room.startInfo = new GameStartInfo(room.settings.mode(), session.symbolLabels(), bars(loaded, 0),
                 session.seedMoney(), session.allowedLeverages(), totalTicks, snapshots(session, prices(loaded, 0)));
+
         log.info("게임 시작 {} — 시나리오 #{} / {}명 / {}틱", room.id, loaded.scenario().id(),
                 room.participants.size(), totalTicks);
         changed(room);
+        GameStartInfo info = room.startInfo;
         fire(l -> l.onGameStarted(room.id, info));
 
         long period = properties.tickMillis();
@@ -243,6 +284,43 @@ public class RoomService {
                 properties.finishedRetentionMillis(), TimeUnit.MILLISECONDS);
     }
 
+    /** 참가자를 내보낸다. 마지막 사람이면 방을 닫고, 방장이면 다음 사람에게 넘긴다. */
+    private RoomView removeParticipant(Room room, String userId, String reason) {
+        Room.Participant p = room.participants.remove(userId);
+        if (p != null) {
+            cancelPendingLeave(p);
+        }
+        if (room.participants.isEmpty()) {
+            close(room, "마지막 참가자 " + reason);
+            return room.view();
+        }
+        if (userId.equals(room.hostUserId)) {
+            room.hostUserId = room.participants.keySet().iterator().next();
+        }
+        return changed(room);
+    }
+
+    /** 대기 중 연결이 끊긴 뒤 유예가 지났다 (§9-9). */
+    private void autoLeave(Room room, String userId) {
+        Room.Participant p = room.participants.get(userId);
+        if (room.status != RoomStatus.WAITING || p == null || p.pendingLeave == null) {
+            return;   // 그사이 시작했거나, 나갔거나, 다시 접속했다
+        }
+        p.pendingLeave = null;
+        log.info("자동 퇴장 {} — {} (연결이 끊긴 채 {}ms)", room.id, p.nickname, properties.disconnectGraceMillis());
+        removeParticipant(room, userId, "자동 퇴장");
+    }
+
+    /** 활동 없이 시간이 지난 대기방을 닫는다 (§9-9). */
+    private void expireWaiting(Room room) {
+        if (room.status != RoomStatus.WAITING) {
+            return;
+        }
+        room.status = RoomStatus.CLOSED;
+        changed(room);
+        close(room, "대기 시간 초과 (" + properties.waitingTimeoutMillis() + "ms 동안 활동 없음)");
+    }
+
     /** 방을 목록에서 지우고 executor 를 닫는다. 지금 처리 중인 작업은 끝까지 돈다. */
     private void close(Room room, String reason) {
         rooms.remove(room.id, room);
@@ -250,10 +328,27 @@ public class RoomService {
         log.info("방 닫힘 {} — {}", room.id, reason);
     }
 
+    /** 방 모습이 바뀌었다고 알린다. 대기 중이면 만료 예약을 다시 잡는다 — 활동이 있었다는 뜻이다. */
     private RoomView changed(Room room) {
+        if (room.status == RoomStatus.WAITING && !room.executor.isShutdown()) {
+            cancel(room.waitingExpiry);
+            room.waitingExpiry = room.executor.schedule(() -> expireWaiting(room),
+                    properties.waitingTimeoutMillis(), TimeUnit.MILLISECONDS);
+        }
         RoomView view = room.view();
         fire(l -> l.onRoomChanged(view));
         return view;
+    }
+
+    private static void cancelPendingLeave(Room.Participant p) {
+        cancel(p.pendingLeave);
+        p.pendingLeave = null;
+    }
+
+    private static void cancel(Future<?> f) {
+        if (f != null) {
+            f.cancel(false);
+        }
     }
 
     private static Map<String, Bar> bars(LoadedScenario loaded, int tickIndex) {

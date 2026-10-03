@@ -9,7 +9,7 @@ export interface User {
 }
 
 export type GameMode = 'DAILY' | 'MINUTE'
-export type RoomStatus = 'WAITING' | 'PLAYING' | 'FINISHED'
+export type RoomStatus = 'WAITING' | 'PLAYING' | 'FINISHED' | 'CLOSED'
 
 export interface Participant {
   userId: string

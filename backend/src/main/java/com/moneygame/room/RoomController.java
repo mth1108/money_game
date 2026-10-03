@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -28,7 +29,8 @@ public class RoomController {
         this.users = users;
     }
 
-    public record CreateRequest(Long userId, GameMode mode, Integer maxPlayers, Long scenarioId) {
+    /** @param seedMoney 선택. 비우면 1억 원. 정밀도를 지키려면 문자열로 보낸다 (§1.5) */
+    public record CreateRequest(Long userId, GameMode mode, Integer maxPlayers, Long scenarioId, BigDecimal seedMoney) {
     }
 
     public record UserRequest(Long userId) {
@@ -46,7 +48,7 @@ public class RoomController {
     public RoomView create(@RequestBody CreateRequest request) {
         UserService.User user = user(request.userId());
         return rooms.create(user.userId(), user.nickname(),
-                RoomSettings.of(request.mode(), request.maxPlayers(), request.scenarioId()));
+                RoomSettings.of(request.mode(), request.maxPlayers(), request.scenarioId(), request.seedMoney()));
     }
 
     @GetMapping("/{roomId}")

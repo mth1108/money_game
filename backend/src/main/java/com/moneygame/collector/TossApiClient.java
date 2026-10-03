@@ -6,6 +6,7 @@ import com.moneygame.marketdata.Candle;
 import com.moneygame.marketdata.Interval;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -34,6 +35,7 @@ import java.util.List;
  * 재시도한다 (CLAUDE.md §3 M1).
  */
 @Component
+@Profile("collector")
 public class TossApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(TossApiClient.class);

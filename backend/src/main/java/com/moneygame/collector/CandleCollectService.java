@@ -4,6 +4,7 @@ import com.moneygame.marketdata.Candle;
 import com.moneygame.marketdata.Interval;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -22,6 +23,7 @@ import java.util.Map;
  * timestamp 로 중복을 제거하므로 같은 명령을 두 번 실행해도 중복이 생기지 않는다.
  */
 @Service
+@Profile("collector")
 public class CandleCollectService {
 
     private static final Logger log = LoggerFactory.getLogger(CandleCollectService.class);

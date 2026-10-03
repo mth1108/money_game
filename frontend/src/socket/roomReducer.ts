@@ -16,6 +16,8 @@ export interface RoomState {
   /** 청산·뉴스·오류 알림. 최근 것이 위 */
   events: string[]
   end: { resultId: string; rankings: Rank[] } | null
+  /** 방이 닫혔거나 없어서 더 있을 수 없다. 이유를 보여주고 로비로 보낸다 */
+  gone: string | null
   /** 받은 원본 JSON. 최근 것이 위 (P0: 「raw JSON 을 그대로 화면에 흘리기」) */
   raw: string[]
 }
@@ -30,6 +32,7 @@ export const initialRoomState: RoomState = {
   rankingTick: 0,
   events: [],
   end: null,
+  gone: null,
   raw: [],
 }
 
@@ -40,7 +43,9 @@ export function roomReducer(state: RoomState, action: { msg: ServerMessage; raw:
   const s = { ...state, raw: push(state.raw, action.raw, RAW_LIMIT) }
   switch (msg.type) {
     case 'ROOM_STATE':
-      return { ...s, room: msg.payload }
+      return msg.payload.status === 'CLOSED'
+        ? { ...s, room: msg.payload, gone: '활동 없이 시간이 지나 방이 닫혔습니다' }
+        : { ...s, room: msg.payload }
     case 'GAME_START':
       return { ...s, game: msg.payload, tick: null, end: null, lastOrder: null, ranking: [], events: [] }
     case 'TICK':
@@ -62,7 +67,10 @@ export function roomReducer(state: RoomState, action: { msg: ServerMessage; raw:
     }
     case 'GAME_END':
       return { ...s, end: msg.payload }
-    case 'ERROR':
-      return { ...s, events: push(s.events, `오류 — ${msg.payload.message}`, EVENT_LIMIT) }
+    case 'ERROR': {
+      const events = push(s.events, `오류 — ${msg.payload.message}`, EVENT_LIMIT)
+      // 새로고침했는데 그사이 방이 사라졌다 (결과 보관 시간 경과, 대기방 만료 등)
+      return msg.payload.message.startsWith('방이 없습니다') ? { ...s, events, gone: msg.payload.message } : { ...s, events }
+    }
   }
 }

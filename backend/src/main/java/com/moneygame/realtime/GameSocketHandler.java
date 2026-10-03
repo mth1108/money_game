@@ -13,6 +13,7 @@ import com.moneygame.room.GameStartInfo;
 import com.moneygame.room.PlayerSnapshot;
 import com.moneygame.room.RoomEventListener;
 import com.moneygame.room.RoomProperties;
+import com.moneygame.room.ResumeInfo;
 import com.moneygame.room.RoomService;
 import com.moneygame.room.RoomView;
 import com.moneygame.scenario.Scenario;
@@ -123,15 +124,51 @@ public class GameSocketHandler extends TextWebSocketHandler implements RoomEvent
             throw new IllegalArgumentException("JOIN 에는 roomId 와 userId 가 필요합니다");
         }
         UserService.User user = users.get(msg.userId());
-        RoomView view = rooms.join(msg.roomId(), user.userId(), user.nickname());
+        // 대기 중이면 입장, 이미 참가자면 그대로 (재접속 — 예약된 자동 퇴장도 취소된다)
+        rooms.join(msg.roomId(), user.userId(), user.nickname());
+        // 연결 등록과 현재 모습 전송을 방 스레드 안에서 한 번에 한다. 그동안 틱이 끼어들지 않는다 (§9-8)
+        rooms.resume(msg.roomId(), user.userId(), info -> {
+            bind(session, info.view().id(), user.userId());
+            sendResume(session, user.userId(), info);
+        });
+    }
 
-        Binding previous = bindings.put(session.getId(), new Binding(view.id(), user.userId()));
-        if (previous != null && !previous.roomId().equals(view.id())) {
+    private void bind(WebSocketSession session, String roomId, String userId) {
+        Binding previous = bindings.put(session.getId(), new Binding(roomId, userId));
+        if (previous != null && !previous.roomId().equals(roomId)) {
             unbind(session.getId(), previous);
         }
-        byRoom.computeIfAbsent(view.id(), k -> new ConcurrentHashMap<>()).put(user.userId(), session);
-        // join 이 보낸 ROOM_STATE 는 묶기 전이라 이 연결에 닿지 않았다. 직접 보낸다
-        send(session, ServerMessage.of(ServerMessage.Type.ROOM_STATE, view));
+        byRoom.computeIfAbsent(roomId, k -> new ConcurrentHashMap<>()).put(userId, session);
+    }
+
+    /**
+     * 방의 현재 모습을 이 연결에만 보낸다. 처음 입장이면 ROOM_STATE 뿐이고,
+     * 진행 중·끝난 방에 다시 들어왔으면 GAME_START · TICK · PLAYER_STATE · RANKING (· GAME_END) 를 이어 보낸다.
+     */
+    private void sendResume(WebSocketSession session, String userId, ResumeInfo info) {
+        String roomId = info.view().id();
+        send(session, ServerMessage.of(ServerMessage.Type.ROOM_STATE, info.view()));
+        GameStartInfo start = info.start();
+        if (start == null) {
+            return;
+        }
+        totalTicks.put(roomId, start.totalTicks());
+        send(session, gameStartMessage(start));
+        if (info.tickIndex() > 0) {
+            send(session, tickMessage(roomId, info.tickIndex(), info.prices(), info.bars()));
+        }
+        PlayerSnapshot me = info.players().get(userId);
+        if (me != null) {
+            send(session, ServerMessage.of(ServerMessage.Type.PLAYER_STATE, me));
+        }
+        if (info.tickIndex() > 0) {
+            send(session, ServerMessage.of(ServerMessage.Type.RANKING,
+                    new ServerMessage.Ranking(info.tickIndex(), ranking(info.players()))));
+        }
+        if (info.result() != null) {
+            send(session, ServerMessage.of(ServerMessage.Type.GAME_END,
+                    new ServerMessage.GameEnd(roomId, info.result().rankings())));
+        }
     }
 
     private void order(WebSocketSession session, ClientMessage msg) {
@@ -157,20 +194,38 @@ public class GameSocketHandler extends TextWebSocketHandler implements RoomEvent
         return b;
     }
 
+    /**
+     * 연결이 끊겼다. 이 연결이 그 사용자의 현재 연결이었으면 방에 알린다 — 대기 중이면 유예 뒤 자동 퇴장 (§9-9).
+     * 새 연결로 이미 바뀐 뒤 옛 연결이 닫힌 것이면 알리지 않는다.
+     */
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         sessions.remove(session.getId());
         Binding b = bindings.remove(session.getId());
-        if (b != null) {
-            unbind(session.getId(), b);
+        if (b != null && unbind(session.getId(), b)) {
+            try {
+                rooms.disconnected(b.roomId(), b.userId());
+            } catch (RuntimeException e) {
+                log.debug("연결 끊김 처리 생략 — 방 {}: {}", b.roomId(), e.toString());
+            }
         }
     }
 
-    private void unbind(String sessionId, Binding b) {
+    /** @return 이 연결이 그 사용자의 현재 연결이었으면 true */
+    private boolean unbind(String sessionId, Binding b) {
         Map<String, WebSocketSession> members = byRoom.get(b.roomId());
-        if (members != null) {
-            members.computeIfPresent(b.userId(), (k, s) -> s.getId().equals(sessionId) ? null : s);
+        if (members == null) {
+            return false;
         }
+        boolean[] wasActive = {false};
+        members.computeIfPresent(b.userId(), (k, s) -> {
+            if (s.getId().equals(sessionId)) {
+                wasActive[0] = true;
+                return null;
+            }
+            return s;
+        });
+        return wasActive[0];
     }
 
     // ───────────────────────────── 송신 (방 스레드) ─────────────────────────────
@@ -183,19 +238,14 @@ public class GameSocketHandler extends TextWebSocketHandler implements RoomEvent
     @Override
     public void onGameStarted(String roomId, GameStartInfo start) {
         totalTicks.put(roomId, start.totalTicks());
-        broadcast(roomId, ServerMessage.of(ServerMessage.Type.GAME_START, new ServerMessage.GameStart(
-                start.mode(), start.labels(), start.initialBars(), start.seedMoney(), start.leverages(),
-                start.totalTicks(), properties.tickMillis())));
+        broadcast(roomId, gameStartMessage(start));
         start.players().forEach((userId, p) ->
                 sendTo(roomId, userId, ServerMessage.of(ServerMessage.Type.PLAYER_STATE, p)));
     }
 
     @Override
     public void onTick(String roomId, TickResult tick, Map<String, Bar> bars, Map<String, PlayerSnapshot> players) {
-        int total = totalTicks.getOrDefault(roomId, tick.tickIndex());
-        int remaining = Math.max(0, total - tick.tickIndex());
-        broadcast(roomId, ServerMessage.of(ServerMessage.Type.TICK, new ServerMessage.Tick(
-                tick.tickIndex(), total, remaining, remaining * properties.tickMillis(), tick.prices(), bars)));
+        broadcast(roomId, tickMessage(roomId, tick.tickIndex(), tick.prices(), bars));
 
         players.forEach((userId, p) -> sendTo(roomId, userId, ServerMessage.of(ServerMessage.Type.PLAYER_STATE, p)));
 
@@ -226,6 +276,19 @@ public class GameSocketHandler extends TextWebSocketHandler implements RoomEvent
         totalTicks.remove(roomId);
         broadcast(roomId, ServerMessage.of(ServerMessage.Type.GAME_END,
                 new ServerMessage.GameEnd(roomId, result.rankings())));
+    }
+
+    private ServerMessage gameStartMessage(GameStartInfo start) {
+        return ServerMessage.of(ServerMessage.Type.GAME_START, new ServerMessage.GameStart(
+                start.mode(), start.labels(), start.initialBars(), start.seedMoney(), start.leverages(),
+                start.totalTicks(), properties.tickMillis()));
+    }
+
+    private ServerMessage tickMessage(String roomId, int tickIndex, Map<String, BigDecimal> prices, Map<String, Bar> bars) {
+        int total = totalTicks.getOrDefault(roomId, tickIndex);
+        int remaining = Math.max(0, total - tickIndex);
+        return ServerMessage.of(ServerMessage.Type.TICK, new ServerMessage.Tick(
+                tickIndex, total, remaining, remaining * properties.tickMillis(), prices, bars));
     }
 
     /** 총자산 내림차순, 동점은 같은 순위 (1, 1, 3) — 엔진의 최종 순위와 같은 규칙 (§3 M4). */

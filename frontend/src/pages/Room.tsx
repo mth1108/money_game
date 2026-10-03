@@ -34,7 +34,7 @@ export function Room({ user, roomId, onExit }: { user: User; roomId: string; onE
     setError(null)
     try {
       // 대기 중에만 나갈 수 있다. 진행 중이면 연결만 끊는다 — 남은 포지션은 종료 시 정리된다
-      if (room?.status === 'WAITING') await api.leave(roomId, user.id)
+      if (room?.status === 'WAITING' && !state.gone) await api.leave(roomId, user.id)
       onExit()
     } catch (err) {
       setError((err as Error).message)
@@ -49,6 +49,11 @@ export function Room({ user, roomId, onExit }: { user: User; roomId: string; onE
         {room?.maxPlayers ?? '-'} <button onClick={exit}>나가기</button>
       </p>
       {error && <p>오류: {error}</p>}
+      {state.gone && (
+        <p>
+          {state.gone} <button onClick={onExit}>로비로</button>
+        </p>
+      )}
 
       <h3>참가자</h3>
       <ul>

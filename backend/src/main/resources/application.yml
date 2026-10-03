@@ -44,6 +44,10 @@ room:
   finished-retention-millis: 600000
   # 요청이 방의 실행 흐름에서 처리되기를 기다리는 최대 시간
   call-timeout-millis: 5000
+  # 대기 중 연결이 끊긴 참가자를 자동 퇴장시키기까지의 유예 (15초). 그 안에 다시 접속하면 취소 (CLAUDE.md §9-9)
+  disconnect-grace-millis: 15000
+  # 아무 활동(입장·퇴장·준비) 없는 대기방을 닫기까지의 시간 (30분)
+  waiting-timeout-millis: 1800000
 
 logging:
   level:

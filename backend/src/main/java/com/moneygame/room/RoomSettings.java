@@ -27,8 +27,8 @@ public record RoomSettings(GameMode mode, int maxPlayers, Long scenarioId, BigDe
     }
 
     /** 빠진 값은 기본값으로 채운다. */
-    public static RoomSettings of(GameMode mode, Integer maxPlayers, Long scenarioId) {
+    public static RoomSettings of(GameMode mode, Integer maxPlayers, Long scenarioId, BigDecimal seedMoney) {
         return new RoomSettings(mode, maxPlayers == null ? DEFAULT_MAX_PLAYERS : maxPlayers,
-                scenarioId, DEFAULT_SEED_MONEY);
+                scenarioId, seedMoney == null ? DEFAULT_SEED_MONEY : seedMoney);
     }
 }

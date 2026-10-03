@@ -8,6 +8,7 @@ export function Lobby({ user, onEnterRoom }: { user: User; onEnterRoom: (roomId:
   const [mode, setMode] = useState<GameMode>('DAILY')
   const [maxPlayers, setMaxPlayers] = useState(4)
   const [scenarioId, setScenarioId] = useState('')
+  const [seedMoney, setSeedMoney] = useState('100000000')
   const [error, setError] = useState<string | null>(null)
 
   // 대기 중인 방 목록. 2초마다 새로 읽는다
@@ -31,7 +32,8 @@ export function Lobby({ user, onEnterRoom }: { user: User; onEnterRoom: (roomId:
     setError(null)
     try {
       const id = scenarioId.trim() === '' ? undefined : Number(scenarioId)
-      const room = await api.createRoom(user.id, mode, maxPlayers, id)
+      const seed = seedMoney.trim() === '' ? undefined : seedMoney.trim()
+      const room = await api.createRoom(user.id, mode, maxPlayers, id, seed)
       onEnterRoom(room.id)
     } catch (err) {
       setError((err as Error).message)
@@ -54,6 +56,9 @@ export function Lobby({ user, onEnterRoom }: { user: User; onEnterRoom: (roomId:
         </label>{' '}
         <label>
           시나리오 ID (비우면 무작위) <input value={scenarioId} onChange={(e) => setScenarioId(e.target.value)} size={4} />
+        </label>{' '}
+        <label>
+          시드머니 (비우면 1억) <input value={seedMoney} onChange={(e) => setSeedMoney(e.target.value)} inputMode="decimal" size={12} />
         </label>{' '}
         <button type="submit">만들기</button>
       </form>

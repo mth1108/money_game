@@ -3,6 +3,7 @@ package com.moneygame.collector;
 import com.moneygame.marketdata.Candle;
 import com.moneygame.marketdata.Interval;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.sql.Timestamp;
@@ -19,6 +20,7 @@ import java.util.List;
  * 중복 행이 생기지 않는다 — M1 완료 판정이다.
  */
 @Component
+@Profile("collector")
 public class PriceCandleBatchWriter {
 
     /** DB 의 ts 는 KST 규약이다. DATETIME 이라 타임존을 담지 않는다. */

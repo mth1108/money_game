@@ -35,13 +35,18 @@ final class Room {
     RoomStatus status = RoomStatus.WAITING;
     LoadedScenario scenario;
     GameSession session;
+    GameStartInfo startInfo;
     ScheduledFuture<?> ticker;
+    /** 활동 없는 대기방 닫기 예약. 활동할 때마다 다시 잡는다 (§9-9) */
+    ScheduledFuture<?> waitingExpiry;
     GameResult result;
 
     static final class Participant {
         final String userId;
         final String nickname;
         boolean ready;
+        /** 대기 중 연결이 끊겨 예약된 자동 퇴장. 다시 접속하면 취소한다 (§9-9) */
+        ScheduledFuture<?> pendingLeave;
 
         Participant(String userId, String nickname) {
             this.userId = userId;

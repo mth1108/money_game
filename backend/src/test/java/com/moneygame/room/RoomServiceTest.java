@@ -44,7 +44,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RoomServiceTest {
 
     private static final ZoneOffset KST = ZoneOffset.ofHours(9);
-    private static final RoomProperties FAST = new RoomProperties(2, 300, 3000);
+    /** 틱 2ms, 결과 보관 300ms, 끊김 유예 150ms, 대기방 만료 10초 */
+    private static final RoomProperties FAST = new RoomProperties(2, 300, 3000, 150, 10_000);
 
     private final Recorder recorder = new Recorder();
     private RoomService service;
@@ -77,9 +78,13 @@ class RoomServiceTest {
     }
 
     private RoomService service(ScenarioSource source, RoomEventListener... extra) {
+        return service(source, FAST, extra);
+    }
+
+    private RoomService service(ScenarioSource source, RoomProperties properties, RoomEventListener... extra) {
         List<RoomEventListener> listeners = new ArrayList<>(List.of(recorder));
         listeners.addAll(List.of(extra));
-        service = new RoomService(source, () -> listeners, FAST);
+        service = new RoomService(source, () -> listeners, properties);
         return service;
     }
 
@@ -99,6 +104,13 @@ class RoomServiceTest {
         final Map<String, CountDownLatch> done = new ConcurrentHashMap<>();
         final List<OrderResult> orders = Collections.synchronizedList(new ArrayList<>());
         final AtomicInteger started = new AtomicInteger();
+        final List<GameStartInfo> starts = Collections.synchronizedList(new ArrayList<>());
+        final List<RoomStatus> statuses = Collections.synchronizedList(new ArrayList<>());
+
+        @Override
+        public void onRoomChanged(RoomView room) {
+            statuses.add(room.status());
+        }
 
         CountDownLatch latch(String roomId) {
             return done.computeIfAbsent(roomId, k -> new CountDownLatch(1));
@@ -111,6 +123,7 @@ class RoomServiceTest {
         @Override
         public void onGameStarted(String roomId, GameStartInfo start) {
             started.incrementAndGet();
+            starts.add(start);
             thread(roomId);
         }
 
@@ -278,6 +291,156 @@ class RoomServiceTest {
             assertEquals(RoomStatus.WAITING, v.status());
             assertFalse(v.participants().get(0).ready());
         }
+    }
+
+    @Nested
+    @DisplayName("버려진 대기방 (§9-9)")
+    class 버려진대기방 {
+
+        @Test
+        void 대기_중_연결이_끊기면_유예_뒤_자동_퇴장한다() throws Exception {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", daily(4, null)).id();
+            rooms.join(id, "2", "p2");
+
+            rooms.disconnected(id, "2");
+            assertEquals(2, rooms.view(id).participants().size(), "유예 중에는 그대로");
+            Thread.sleep(FAST.disconnectGraceMillis() + 150);
+
+            assertEquals(List.of("1"), rooms.view(id).participants().stream().map(RoomView.Participant::userId).toList());
+        }
+
+        @Test
+        void 유예_안에_다시_들어오면_퇴장하지_않는다() throws Exception {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", daily(4, null)).id();
+            rooms.join(id, "2", "p2");
+
+            rooms.disconnected(id, "2");
+            rooms.join(id, "2", "p2");   // 재접속
+            Thread.sleep(FAST.disconnectGraceMillis() + 150);
+
+            assertEquals(2, rooms.view(id).participants().size());
+        }
+
+        @Test
+        void 혼자_있던_사람이_끊기면_방이_사라진다() throws Exception {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", daily(4, null)).id();
+
+            rooms.disconnected(id, "1");
+            Thread.sleep(FAST.disconnectGraceMillis() + 150);
+
+            assertThrows(NoSuchElementException.class, () -> rooms.view(id));
+        }
+
+        @Test
+        void 진행_중_연결_끊김은_무시한다() throws Exception {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", daily(1, null)).id();
+            rooms.ready(id, "1", true);
+
+            rooms.disconnected(id, "1");
+            awaitFinish(id);
+
+            assertEquals(1, rooms.result(id).result().rankings().size(), "끝까지 참가자로 남는다");
+        }
+
+        @Test
+        void 활동_없는_대기방은_CLOSED_를_알리고_닫힌다() throws Exception {
+            RoomService rooms = service((mode, sid) -> scenario(1), new RoomProperties(2, 300, 3000, 150, 200));
+            String id = rooms.create("1", "p1", daily(4, null)).id();
+
+            Thread.sleep(450);
+
+            assertThrows(NoSuchElementException.class, () -> rooms.view(id));
+            assertEquals(RoomStatus.CLOSED, recorder.statuses.get(recorder.statuses.size() - 1));
+        }
+
+        @Test
+        void 활동이_있으면_만료가_미뤄진다() throws Exception {
+            RoomService rooms = service((mode, sid) -> scenario(1), new RoomProperties(2, 300, 3000, 150, 400));
+            String id = rooms.create("1", "p1", daily(4, null)).id();
+
+            Thread.sleep(250);
+            rooms.join(id, "2", "p2");   // 활동
+            Thread.sleep(250);
+            assertEquals(RoomStatus.WAITING, rooms.view(id).status(), "만료가 다시 잡혔다");
+
+            Thread.sleep(400);
+            assertThrows(NoSuchElementException.class, () -> rooms.view(id));
+        }
+    }
+
+    @Nested
+    @DisplayName("재접속 (§9-8)")
+    class 재접속 {
+
+        @Test
+        void 대기_중이면_방_모습만_준다() {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", daily(4, null)).id();
+            List<ResumeInfo> got = new ArrayList<>();
+
+            rooms.resume(id, "1", got::add);
+
+            assertEquals(RoomStatus.WAITING, got.get(0).view().status());
+            assertEquals(null, got.get(0).start());
+            assertEquals(-1, got.get(0).tickIndex());
+        }
+
+        @Test
+        void 진행_중이면_시작_정보와_현재_틱과_내_상태를_방_스레드에서_준다() {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", daily(1, null)).id();
+            rooms.ready(id, "1", true);
+            rooms.submitOrder(id, OrderRequest.buy("1", "A", new BigDecimal("10000000"), 2));
+            List<ResumeInfo> got = new ArrayList<>();
+            List<String> threads = new ArrayList<>();
+
+            rooms.resume(id, "1", info -> {
+                got.add(info);
+                threads.add(Thread.currentThread().getName());
+            });
+
+            ResumeInfo info = got.get(0);
+            assertEquals(List.of("A", "B"), info.start().labels());
+            assertEquals(1, info.players().get("1").positions().size(), "주문한 포지션이 보인다");
+            assertEquals(info.prices().get("A"), info.bars().get("A").close());
+            assertEquals(List.of("room-" + id), threads);
+        }
+
+        @Test
+        void 끝난_방이면_최종_결과도_준다() throws Exception {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", daily(1, null)).id();
+            rooms.ready(id, "1", true);
+            awaitFinish(id);
+            List<ResumeInfo> got = new ArrayList<>();
+
+            rooms.resume(id, "1", got::add);
+
+            assertEquals(240, got.get(0).tickIndex());
+            assertEquals(1, got.get(0).result().rankings().size());
+        }
+
+        @Test
+        void 참가자가_아니면_거부한다() {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", daily(4, null)).id();
+            assertThrows(IllegalArgumentException.class, () -> rooms.resume(id, "9", info -> { }));
+        }
+    }
+
+    @Test
+    void 방마다_시드머니를_정할_수_있다() {
+        RoomService rooms = service();
+        RoomSettings settings = RoomSettings.of(GameMode.DAILY, 1, null, new BigDecimal("5000000"));
+        String id = rooms.create("1", "p1", settings).id();
+        rooms.ready(id, "1", true);
+
+        assertEquals(new BigDecimal("5000000"), recorder.starts.get(0).seedMoney());
+        assertEquals(new BigDecimal("5000000"), recorder.starts.get(0).players().get("1").cash());
     }
 
     @Nested

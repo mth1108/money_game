@@ -6,14 +6,19 @@ import type { User } from './api/types'
 import { Enter } from './pages/Enter'
 import { Lobby } from './pages/Lobby'
 import { Room } from './pages/Room'
-import { loadUser, saveUser } from './session'
+import { loadRoomId, loadUser, saveRoomId, saveUser } from './session'
 
 type ServerStatus = '확인 중' | '연결됨' | '끊김'
 
 export default function App() {
   const [user, setUser] = useState<User | null>(loadUser)
   const [server, setServer] = useState<ServerStatus>('확인 중')
-  const [roomId, setRoomId] = useState<string | null>(null)
+  const [roomId, setRoomIdState] = useState<string | null>(loadRoomId)
+
+  function setRoomId(id: string | null) {
+    saveRoomId(id)
+    setRoomIdState(id)
+  }
 
   // 서버 연결 표시. 5초마다 방 목록을 불러 본다
   useEffect(() => {

@@ -8,6 +8,7 @@ import com.moneygame.user.UserService;
 import com.moneygame.web.JsonConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -20,8 +21,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -64,6 +68,32 @@ class RoomControllerTest {
                 .andExpect(jsonPath("$.id").value("ab12cd34"))
                 .andExpect(jsonPath("$.hostUserId").value("7"))
                 .andExpect(jsonPath("$.status").value("WAITING"));
+    }
+
+    @Test
+    void 시드머니를_보내면_방_설정에_들어가고_비우면_1억이다() throws Exception {
+        when(users.get(7)).thenReturn(new UserService.User(7, "철수"));
+        when(rooms.create(eq("7"), eq("철수"), any())).thenReturn(waiting("r1"));
+        ArgumentCaptor<RoomSettings> captor = ArgumentCaptor.forClass(RoomSettings.class);
+
+        mvc.perform(post("/api/rooms").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":7,\"mode\":\"DAILY\",\"seedMoney\":\"5000000\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/rooms").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":7,\"mode\":\"DAILY\"}"))
+                .andExpect(status().isOk());
+
+        verify(rooms, times(2)).create(eq("7"), eq("철수"), captor.capture());
+        assertEquals(new BigDecimal("5000000"), captor.getAllValues().get(0).seedMoney());
+        assertEquals(RoomSettings.DEFAULT_SEED_MONEY, captor.getAllValues().get(1).seedMoney());
+    }
+
+    @Test
+    void 시드머니가_0_이하면_400() throws Exception {
+        when(users.get(7)).thenReturn(new UserService.User(7, "철수"));
+        mvc.perform(post("/api/rooms").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":7,\"mode\":\"DAILY\",\"seedMoney\":\"0\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

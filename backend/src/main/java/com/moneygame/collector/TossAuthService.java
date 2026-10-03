@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -27,6 +28,7 @@ import java.time.Instant;
  * refresh token 은 제공되지 않는다. 만료되면 같은 엔드포인트로 재발급한다.
  */
 @Service
+@Profile("collector")
 public class TossAuthService {
 
     private static final Logger log = LoggerFactory.getLogger(TossAuthService.class);

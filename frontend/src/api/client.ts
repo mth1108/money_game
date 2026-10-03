@@ -29,8 +29,8 @@ export const api = {
 
   listRooms: () => request<RoomView[]>('GET', '/api/rooms'),
 
-  createRoom: (userId: number, mode: GameMode, maxPlayers: number, scenarioId?: number) =>
-    request<RoomView>('POST', '/api/rooms', { userId, mode, maxPlayers, scenarioId }),
+  createRoom: (userId: number, mode: GameMode, maxPlayers: number, scenarioId?: number, seedMoney?: string) =>
+    request<RoomView>('POST', '/api/rooms', { userId, mode, maxPlayers, scenarioId, seedMoney }),
 
   room: (roomId: string) => request<RoomView>('GET', `/api/rooms/${roomId}`),
 

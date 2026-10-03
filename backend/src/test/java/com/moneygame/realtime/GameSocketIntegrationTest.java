@@ -51,7 +51,8 @@ import static org.mockito.Mockito.when;
  */
 @Tag("integration")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"room.tick-millis=10", "spring.jpa.hibernate.ddl-auto=validate"})
+        properties = {"room.tick-millis=10", "room.disconnect-grace-millis=300",
+                "spring.jpa.hibernate.ddl-auto=validate"})
 @DisplayName("M7 실시간 통신 (WebSocket)")
 class GameSocketIntegrationTest {
 
@@ -209,6 +210,66 @@ class GameSocketIntegrationTest {
         assertEquals(roomId, end.at("/payload/resultId").asText());
         assertEquals("2", end.at("/payload/rankings/0/userId").asText(), "거래하지 않은 영희가 1위");
         assertEquals(1, c1.of("GAME_END").size());
+    }
+
+    @Test
+    void 진행_중에_다시_접속하면_게임_상태를_순서대로_다시_받는다() throws Exception {
+        String roomId = rooms.create("1", "철수", new RoomSettings(GameMode.DAILY, 1, null,
+                RoomSettings.DEFAULT_SEED_MONEY)).id();
+        Client first = connect();
+        first.send("{\"type\":\"JOIN\",\"roomId\":\"" + roomId + "\",\"userId\":1}");
+        await(first.roomState, "ROOM_STATE");
+        first.send("{\"type\":\"READY\",\"ready\":true}");
+        await(first.gameStart, "GAME_START");
+        first.send("{\"type\":\"ORDER\",\"symbolLabel\":\"B\",\"action\":\"BUY\",\"margin\":\"10000000\",\"leverage\":2}");
+        Thread.sleep(400);
+        first.ws.abort();   // 새로고침처럼 연결이 끊긴다
+
+        Client again = connect();
+        again.send("{\"type\":\"JOIN\",\"roomId\":\"" + roomId + "\",\"userId\":1}");
+        await(again.gameEnd, "GAME_END");
+
+        List<String> types;
+        synchronized (again.messages) {
+            types = again.messages.stream().map(m -> m.get("type").asText()).toList();
+        }
+        assertEquals(List.of("ROOM_STATE", "GAME_START", "TICK", "PLAYER_STATE", "RANKING"), types.subList(0, 5),
+                "재접속하면 현재 모습을 이 순서로 먼저 받는다");
+        assertEquals("PLAYING", again.messages.get(0).at("/payload/status").asText());
+        JsonNode me = again.messages.get(3);
+        assertEquals("B", me.at("/payload/positions/0/symbolLabel").asText(), "끊기기 전에 산 포지션이 보인다");
+
+        List<Integer> ticks = again.of("TICK").stream().map(m -> m.at("/payload/tickIndex").asInt()).toList();
+        for (int i = 1; i < ticks.size(); i++) {
+            assertTrue(ticks.get(i) > ticks.get(i - 1), "틱이 거꾸로 오지 않는다: " + ticks);
+        }
+        assertEquals(240, ticks.get(ticks.size() - 1));
+    }
+
+    @Test
+    void 대기_중_연결이_끊긴_참가자는_유예_뒤_빠진다() throws Exception {
+        String roomId = rooms.create("1", "철수", new RoomSettings(GameMode.DAILY, 2, null,
+                RoomSettings.DEFAULT_SEED_MONEY)).id();
+        Client c1 = connect();
+        Client c2 = connect();
+        c1.send("{\"type\":\"JOIN\",\"roomId\":\"" + roomId + "\",\"userId\":1}");
+        c2.send("{\"type\":\"JOIN\",\"roomId\":\"" + roomId + "\",\"userId\":2}");
+        await(c2.roomState, "c2 ROOM_STATE");
+
+        c2.ws.abort();   // 탭을 닫았다
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline) {
+            List<JsonNode> states = c1.of("ROOM_STATE");
+            if (!states.isEmpty() && states.get(states.size() - 1).at("/payload/participants").size() == 1) {
+                break;
+            }
+            Thread.sleep(50);
+        }
+
+        List<JsonNode> states = c1.of("ROOM_STATE");
+        JsonNode last = states.get(states.size() - 1);
+        assertEquals(1, last.at("/payload/participants").size(), "영희가 빠졌다");
+        assertEquals("1", last.at("/payload/participants/0/userId").asText());
     }
 
     @Test

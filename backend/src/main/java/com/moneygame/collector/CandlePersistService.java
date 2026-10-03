@@ -8,6 +8,7 @@ import com.moneygame.marketdata.entity.CollectLogEntity;
 import com.moneygame.marketdata.entity.SymbolEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,7 @@ import java.util.List;
  * 한 종목의 적재 전체가 한 트랜잭션이라, 중간에 실패하면 이력도 남지 않는다.
  */
 @Service
+@Profile("collector")
 public class CandlePersistService {
 
     private static final Logger log = LoggerFactory.getLogger(CandlePersistService.class);
