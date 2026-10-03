@@ -1263,10 +1263,10 @@ done
   종목을 짐작할 수 있다 — 은닉 수준을 어디까지 할지는 P1 전에 정한다
 - 저장소 정리: reflog 에 손상된 옛 커밋 2개(`678edb6`, `3f97503`)가 남아 `git gc` 가 실패할 수 있다.
   `.git/config` 가 Windows 값(`filemode=false`, `symlinks=false`)이다. Windows PC 의 옛 커밋 5~7 은 push 하지 않는다
-- ⚠️ **프로젝트가 iCloud 와 동기화되는 데스크탑에 있다** (2026-10-03 확인, `FXICloudDriveDesktop = 1`).
-  빌드 폴더에 `RoomServiceTest 2.class` 같은 동기화 충돌 복제본 20개가 생겨 테스트 실행이 깨졌다 (`./gradlew clean` 으로 해결).
-  git 저장소·빌드 산출물·`node_modules` 를 iCloud 동기화 폴더에 두면 충돌 복제본, 저장 공간 최적화로 내려간 파일,
-  `.git` 손상이 생길 수 있다. 2026-09-24 소스 유실과도 관련 있을 수 있다 → **동기화되지 않는 폴더(예: `~/dev/moneyGame`)로 옮기기를 권장**
+- ✅ **iCloud 동기화 폴더 문제 — 2026-10-03 해결.** 프로젝트가 iCloud 와 동기화되는 데스크탑(`~/Desktop/moneyGame`)에 있어
+  빌드 폴더에 `RoomServiceTest 2.class` 같은 충돌 복제본 20개가 생기고 테스트 실행이 깨졌다. 2026-09-24 소스 유실과도 관련 있을 수 있다.
+  **동기화되지 않는 `~/dev/moneyGame` 으로 옮겼다** — 파일 850개·내용·git 이력이 같은지 확인하고, 새 위치에서 테스트(단위 159·통합 32)와
+  프론트 빌드가 통과한 뒤 옛 폴더를 휴지통으로 보냈다. git 저장소·빌드 산출물·`node_modules` 는 iCloud 동기화 폴더에 두지 않는다
 
 ---
 
