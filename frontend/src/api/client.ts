@@ -1,4 +1,6 @@
 // REST 호출 (CLAUDE.md §3 M6). 오류 응답은 {"error": "사유"} 다.
+// axios 를 쓴다 (2026-10-03). 금액은 서버가 문자열로 보내므로 JSON 파싱에서 정밀도가 깨지지 않는다 (§1.5).
+import axios, { type Method } from 'axios'
 import type { GameMode, GameRecord, HistoryEntry, RoomOptions, RoomView, User } from './types'
 
 export class ApiError extends Error {
@@ -10,18 +12,23 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(path, {
-    method,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  })
-  const text = await res.text()
-  const data = text ? JSON.parse(text) : undefined
-  if (!res.ok) {
-    throw new ApiError(res.status, data?.error ?? `HTTP ${res.status}`)
+/** 개발 서버·preview 가 /api 를 백엔드로 프록시한다 — 같은 출처라 baseURL 이 필요 없다 */
+const http = axios.create()
+
+/** 화면은 ApiError 하나만 다룬다. 서버 응답이 없으면(연결 실패) status 0 이다 */
+async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  try {
+    const res = await http.request<T>({ method, url: path, data: body })
+    return res.data
+  } catch (err) {
+    if (axios.isAxiosError<{ error?: string }>(err)) {
+      if (err.response) {
+        throw new ApiError(err.response.status, err.response.data?.error ?? `HTTP ${err.response.status}`)
+      }
+      throw new ApiError(0, '서버에 연결할 수 없습니다')
+    }
+    throw err
   }
-  return data as T
 }
 
 export const api = {

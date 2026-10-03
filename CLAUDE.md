@@ -923,7 +923,9 @@ PlayerState
 
 **스택** — React + **TypeScript** + Vite (2026-10-03 결정). Node 는 nvm 의 v24.
 의존성은 `react`, `react-dom`, `vite`, `@vitejs/plugin-react`, `typescript`, `@types/react`, `@types/react-dom`,
-그리고 P1 의 `echarts`, `tailwindcss`, `@tailwindcss/vite` (2026-10-03 승인, §8) 만 둡니다.
+그리고 P1 의 `echarts`, `tailwindcss`, `@tailwindcss/vite` (2026-10-03 승인, §8), REST 용 `axios` (2026-10-03 승인) 만 둡니다.
+REST 호출은 `src/api/client.ts` 의 `request()` 한 곳에서 axios 로 합니다. 화면은 `ApiError`(상태 코드 + 서버의 `error` 사유,
+연결 실패면 상태 0) 하나만 다룹니다.
 개발 서버는 `/api`·`/ws` 를 백엔드(8080)로 프록시합니다 — 같은 출처라 CORS 설정이 필요 없습니다.
 
 ### P0. 테스트 하네스 (M4~M7 검증용)
@@ -1153,6 +1155,7 @@ P1 1차 구현을 마쳤습니다 (2026-10-03, §4 P1 「구현」).
 | 라벨 | **임시로 지금처럼 A · B · C** | 은닉 수준(가격대로 종목 짐작)은 나중에 정한다 (§9-13) |
 | P1 차트 | **ECharts** (`echarts`) — §1.7 승인 | 캔들·거래량·매매 지점. 결과 화면의 다른 그래프에도 쓴다. React 래퍼 패키지는 쓰지 않는다 |
 | P1 스타일 | **Tailwind CSS** (`tailwindcss`, `@tailwindcss/vite`) — §1.7 승인 | |
+| REST 클라이언트 | **fetch → axios** — §1.7 승인 | 사용자에게 더 익숙하다. 바꾼 곳은 `api/client.ts` 의 `request()` 하나, 화면 코드는 그대로. 번들 +약 14KB(gzip) |
 | 게임 전 과거 캔들 | **보여준다 — 시작 전 60봉** (`room.history-bars`) | 0틱에도 추세를 보고 판단한다. 시각은 계속 보내지 않는다. 분봉은 장 초반이면 전날 봉이 섞인다 — 배경용이라 허용 |
 | 모바일 | **데스크톱 우선, 폰에서 깨지지만 않게** | 좁으면 세로로 쌓는다. 폰 전용 조작은 만들지 않는다 |
 
