@@ -92,6 +92,6 @@ final class Room {
         return new RoomView(id, status, settings.mode(), settings.maxPlayers(), hostUserId, List.copyOf(list),
                 session == null ? List.of() : session.symbolLabels(),
                 session == null ? -1 : session.tickIndex(),
-                session == null ? 0 : session.totalTicks());
+                settings.ticks());
     }
 }

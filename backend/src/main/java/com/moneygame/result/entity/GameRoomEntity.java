@@ -35,6 +35,14 @@ public class GameRoomEntity {
     @Column(name = "total_ticks", nullable = false)
     private Integer totalTicks;
 
+    /** KST. 실제로 쓴 첫 봉(0틱) */
+    @Column(name = "period_start", nullable = false)
+    private LocalDateTime periodStart;
+
+    /** KST. 실제로 쓴 마지막 봉. 짧은 판이면 시나리오 끝보다 이르다 */
+    @Column(name = "period_end", nullable = false)
+    private LocalDateTime periodEnd;
+
     @Column(name = "started_at", nullable = false)
     private LocalDateTime startedAt;
 
@@ -45,12 +53,15 @@ public class GameRoomEntity {
     }
 
     public GameRoomEntity(String roomCode, Long scenarioId, String mode, BigDecimal seedMoney, int totalTicks,
+                          LocalDateTime periodStart, LocalDateTime periodEnd,
                           LocalDateTime startedAt, LocalDateTime finishedAt) {
         this.roomCode = roomCode;
         this.scenarioId = scenarioId;
         this.mode = mode;
         this.seedMoney = seedMoney;
         this.totalTicks = totalTicks;
+        this.periodStart = periodStart;
+        this.periodEnd = periodEnd;
         this.startedAt = startedAt;
         this.finishedAt = finishedAt;
     }
@@ -61,6 +72,8 @@ public class GameRoomEntity {
     public String getMode() { return mode; }
     public BigDecimal getSeedMoney() { return seedMoney; }
     public Integer getTotalTicks() { return totalTicks; }
+    public LocalDateTime getPeriodStart() { return periodStart; }
+    public LocalDateTime getPeriodEnd() { return periodEnd; }
     public LocalDateTime getStartedAt() { return startedAt; }
     public LocalDateTime getFinishedAt() { return finishedAt; }
 }

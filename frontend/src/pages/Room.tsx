@@ -45,7 +45,8 @@ export function Room({ user, roomId, onExit }: { user: User; roomId: string; onE
     <div>
       <h2>방 {roomId}</h2>
       <p>
-        연결: {status} · 상태: {room?.status ?? '-'} · 모드: {room?.mode ?? '-'} · 인원 {room?.participants.length ?? 0}/
+        연결: {status} · 상태: {room?.status ?? '-'} · 모드: {room?.mode ?? '-'} · 판 길이 {room?.totalTicks ?? '-'}틱 · 인원{' '}
+        {room?.participants.length ?? 0}/
         {room?.maxPlayers ?? '-'} <button onClick={exit}>나가기</button>
       </p>
       {error && <p>오류: {error}</p>}

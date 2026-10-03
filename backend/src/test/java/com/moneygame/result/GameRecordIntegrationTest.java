@@ -90,6 +90,7 @@ class GameRecordIntegrationTest {
                         new Trade(124, human, "A", Trade.Kind.LIQUIDATION, 1129, bd("53000"), bd("29993766.66666667"), 3, bd("89755.5000")),
                         new Trade(240, "bot-1", "B", Trade.Kind.SETTLEMENT, 500, bd("206000"), bd("99850000"), 1, bd("154500.0000"))));
         return new FinishedGame("ab12cd34", GameMode.DAILY, bd("100000000"), 240, scenarios.get(scenarioId),
+                LocalDateTime.of(2024, 1, 1, 0, 0), LocalDateTime.of(2024, 8, 28, 0, 0),
                 LocalDateTime.of(2026, 10, 3, 9, 0), LocalDateTime.of(2026, 10, 3, 9, 4),
                 List.of(new FinishedGame.Player(human, userId, "zz결과테스터", false),
                         new FinishedGame.Player("bot-1", null, "존버봇", true)),
@@ -106,6 +107,9 @@ class GameRecordIntegrationTest {
         assertEquals("DAILY", r.mode());
         assertEquals(0, bd("100000000").compareTo(r.seedMoney()));
         assertEquals("zz결과용", r.scenario().title());
+        assertEquals(240, r.totalTicks());
+        assertEquals(LocalDateTime.of(2024, 1, 1, 0, 0), r.periodStart(), "실제로 쓴 구간");
+        assertEquals(LocalDateTime.of(2024, 8, 28, 0, 0), r.periodEnd());
 
         // 순위 순. 봇은 사용자 ID 없이 봇으로 표시 (2026-10-03 결정)
         assertEquals(List.of("bot-1", Long.toString(userId)), r.participants().stream().map(ResultService.Participant::playerKey).toList());
@@ -151,6 +155,7 @@ class GameRecordIntegrationTest {
         assertEquals(2, h.playerCount());
         assertEquals("zz결과용", h.scenarioTitle());
         assertEquals(1, h.liquidatedCount());
+        assertEquals(240, h.totalTicks());
     }
 
     @Test

@@ -47,7 +47,7 @@ class RoomServiceTest {
 
     private static final ZoneOffset KST = ZoneOffset.ofHours(9);
     /** 틱 2ms, 결과 보관 300ms, 끊김 유예 150ms, 대기방 만료 10초 */
-    private static final RoomProperties FAST = new RoomProperties(2, 300, 3000, 150, 10_000);
+    private static final RoomProperties FAST = new RoomProperties(2, 300, 3000, 150, 10_000, List.of(60, 120, 240), 240);
 
     private final Recorder recorder = new Recorder();
     private final Records records = new Records();
@@ -108,7 +108,7 @@ class RoomServiceTest {
     }
 
     private RoomService service() {
-        return service((mode, id) -> scenario(id == null ? 1 : id));
+        return service((mode, id, minBars) -> scenario(id == null ? 1 : id));
     }
 
     private static RoomSettings daily(int maxPlayers, Long scenarioId) {
@@ -301,7 +301,7 @@ class RoomServiceTest {
 
         @Test
         void 시나리오를_못_읽으면_시작하지_않고_준비가_풀린다() {
-            RoomService rooms = service((mode, sid) -> {
+            RoomService rooms = service((mode, sid, minBars) -> {
                 throw new IllegalStateException("DAILY 모드로 등록된 시나리오가 없습니다");
             });
             String id = rooms.create("1", "p1", daily(1, null)).id();
@@ -369,7 +369,7 @@ class RoomServiceTest {
 
         @Test
         void 활동_없는_대기방은_CLOSED_를_알리고_닫힌다() throws Exception {
-            RoomService rooms = service((mode, sid) -> scenario(1), new RoomProperties(2, 300, 3000, 150, 200));
+            RoomService rooms = service((mode, sid, minBars) -> scenario(1), new RoomProperties(2, 300, 3000, 150, 200, List.of(60, 120, 240), 240));
             String id = rooms.create("1", "p1", daily(4, null)).id();
 
             Thread.sleep(450);
@@ -380,7 +380,7 @@ class RoomServiceTest {
 
         @Test
         void 활동이_있으면_만료가_미뤄진다() throws Exception {
-            RoomService rooms = service((mode, sid) -> scenario(1), new RoomProperties(2, 300, 3000, 150, 400));
+            RoomService rooms = service((mode, sid, minBars) -> scenario(1), new RoomProperties(2, 300, 3000, 150, 400, List.of(60, 120, 240), 240));
             String id = rooms.create("1", "p1", daily(4, null)).id();
 
             Thread.sleep(250);
@@ -456,12 +456,86 @@ class RoomServiceTest {
     @Test
     void 방마다_시드머니를_정할_수_있다() {
         RoomService rooms = service();
-        RoomSettings settings = RoomSettings.of(GameMode.DAILY, 1, null, new BigDecimal("5000000"), 0);
+        RoomSettings settings = RoomSettings.of(GameMode.DAILY, 1, null, new BigDecimal("5000000"), 0, null, 240);
         String id = rooms.create("1", "p1", settings).id();
         rooms.ready(id, "1", true);
 
         assertEquals(new BigDecimal("5000000"), recorder.starts.get(0).seedMoney());
         assertEquals(new BigDecimal("5000000"), recorder.starts.get(0).players().get("1").cash());
+    }
+
+    @Nested
+    @DisplayName("판 길이")
+    class 판길이 {
+
+        private RoomSettings ticks(int ticks) {
+            return new RoomSettings(GameMode.DAILY, 1, null, RoomSettings.DEFAULT_SEED_MONEY, 0, ticks);
+        }
+
+        /** 앞 bars 봉만 있는 짧은 시나리오 */
+        private LoadedScenario shortScenario(int bars) {
+            LoadedScenario full = scenario(1);
+            Map<String, List<Candle>> cut = new LinkedHashMap<>();
+            full.candlesByLabel().forEach((label, c) -> cut.put(label, c.subList(0, bars)));
+            Scenario s = full.scenario();
+            return new LoadedScenario(new Scenario(s.id(), s.title(), s.interval(), s.start(), s.end(), bars, s.symbols()),
+                    cut, Map.of());
+        }
+
+        @Test
+        void 고른_판_길이만큼만_돌고_멈추며_실제로_쓴_기간이_기록된다() throws Exception {
+            RoomService rooms = service();
+            String id = rooms.create("1", "p1", ticks(60)).id();
+            rooms.ready(id, "1", true);
+
+            awaitFinish(id);
+            Thread.sleep(30);
+
+            assertEquals(60, recorder.ticks.get(id).size(), "정확히 60틱");
+            assertEquals(60, recorder.starts.get(0).totalTicks());
+            FinishedGame g = records.games.get(0);
+            assertEquals(60, g.totalTicks());
+            // 가짜 시나리오는 2024-01-01 부터 하루 한 봉 -> 60틱 봉은 2024-03-01 (윤년)
+            assertEquals(LocalDateTime.of(2024, 1, 1, 0, 0), g.periodStart());
+            assertEquals(LocalDateTime.of(2024, 3, 1, 0, 0), g.periodEnd(), "시나리오 끝(2024-08-28)이 아니라 실제로 쓴 데까지");
+        }
+
+        @Test
+        void 시작_전에도_고른_판_길이가_보인다() {
+            RoomService rooms = service();
+            assertEquals(120, rooms.create("1", "p1", ticks(120)).totalTicks());
+        }
+
+        @Test
+        void 허용되지_않은_판_길이는_거부한다() {
+            RoomService rooms = service();
+            IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> rooms.create("1", "p1", ticks(100)));
+            assertTrue(e.getMessage().contains("[60, 120, 240]"), e.getMessage());
+        }
+
+        @Test
+        void 시나리오에_필요한_봉_수를_알린다() {
+            List<Integer> asked = new ArrayList<>();
+            RoomService rooms = service((mode, sid, minBars) -> {
+                asked.add(minBars);
+                return scenario(1);
+            });
+            String id = rooms.create("1", "p1", ticks(120)).id();
+            rooms.ready(id, "1", true);
+
+            assertEquals(List.of(121), asked, "판 길이 + 1 봉");
+        }
+
+        @Test
+        void 시나리오가_판_길이보다_짧으면_시작하지_않는다() {
+            RoomService rooms = service((mode, sid, minBars) -> shortScenario(100));
+            String id = rooms.create("1", "p1", ticks(120)).id();
+
+            IllegalStateException e = assertThrows(IllegalStateException.class, () -> rooms.ready(id, "1", true));
+
+            assertTrue(e.getMessage().contains("120틱"), e.getMessage());
+            assertEquals(RoomStatus.WAITING, rooms.view(id).status());
+        }
     }
 
     @Nested
@@ -583,7 +657,7 @@ class RoomServiceTest {
                     throw new RuntimeException("리스너 고장");
                 }
             };
-            RoomService rooms = service((mode, sid) -> scenario(1), broken);
+            RoomService rooms = service((mode, sid, minBars) -> scenario(1), broken);
             String id = rooms.create("1", "p1", daily(1, null)).id();
             rooms.ready(id, "1", true);
 
@@ -611,7 +685,7 @@ class RoomServiceTest {
         @Test
         void 판이_끝나면_한_번_기록하고_결과_ID_를_알린다() throws Exception {
             RoomService rooms = service();
-            String id = rooms.create("1", "p1", RoomSettings.of(GameMode.DAILY, 2, null, new BigDecimal("5000000"), 0)).id();
+            String id = rooms.create("1", "p1", RoomSettings.of(GameMode.DAILY, 2, null, new BigDecimal("5000000"), 0, null, 240)).id();
             rooms.join(id, "2", "p2");
             rooms.ready(id, "1", true);
             rooms.ready(id, "2", true);

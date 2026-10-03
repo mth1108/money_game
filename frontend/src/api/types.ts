@@ -19,6 +19,18 @@ export interface Participant {
   bot: boolean
 }
 
+/** 방 만들기 선택지 (GET /api/rooms/options). 화면은 선택지를 하드코딩하지 않는다 */
+export interface RoomOptions {
+  modes: { mode: GameMode; leverages: number[] }[]
+  allowedTicks: number[]
+  defaultTicks: number
+  tickMillis: number
+  defaultMaxPlayers: number
+  maxPlayers: number
+  maxBots: number
+  defaultSeedMoney: Money
+}
+
 export interface RoomView {
   id: string
   status: RoomStatus
@@ -95,6 +107,9 @@ export interface GameRecord {
   mode: GameMode
   seedMoney: Money
   totalTicks: number
+  /** 실제로 쓴 시세 구간. 짧은 판이면 시나리오 기간보다 짧다 */
+  periodStart: string
+  periodEnd: string
   startedAt: string
   finishedAt: string
   scenario: Scenario
@@ -106,6 +121,7 @@ export interface HistoryEntry {
   gameId: number
   finishedAt: string
   mode: GameMode
+  totalTicks: number
   scenarioTitle: string
   rank: number
   playerCount: number

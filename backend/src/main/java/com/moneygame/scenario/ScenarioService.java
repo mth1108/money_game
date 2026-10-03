@@ -66,10 +66,16 @@ public class ScenarioService {
                 .orElseThrow(() -> new IllegalArgumentException("시나리오가 없습니다: " + id));
     }
 
-    /** 해당 단위의 시나리오 중 하나를 고른다. 없으면 빈 값이다. */
+    /**
+     * 해당 단위의 시나리오 중 하나를 고른다. 없으면 빈 값이다.
+     *
+     * @param minBars 필요한 최소 봉 수 (= 판 길이 + 1). 이보다 짧은 시나리오는 고르지 않는다
+     */
     @Transactional(readOnly = true)
-    public Optional<Scenario> pickRandom(Interval interval, RandomGenerator random) {
-        List<ScenarioEntity> pool = scenarios.findByBarIntervalOrderByIdAsc(interval.code());
+    public Optional<Scenario> pickRandom(Interval interval, int minBars, RandomGenerator random) {
+        List<ScenarioEntity> pool = scenarios.findByBarIntervalOrderByIdAsc(interval.code()).stream()
+                .filter(s -> s.getBarCount() >= minBars)
+                .toList();
         if (pool.isEmpty()) {
             return Optional.empty();
         }

@@ -6,8 +6,9 @@ import java.util.List;
  * 방의 현재 모습. 방 목록·대기실·M7 의 ROOM_STATE 재료다.
  * 시나리오의 실제 종목·기간은 담지 않는다 — 게임 중에는 라벨만 보인다 (§3 M3).
  *
- * @param labels   판이 시작된 뒤에만 채워진다
- * @param tickIndex 판 시작 전에는 -1
+ * @param labels     판이 시작된 뒤에만 채워진다
+ * @param tickIndex  판 시작 전에는 -1
+ * @param totalTicks 판 길이. 방을 만들 때 고른 값이라 시작 전에도 보인다
  */
 public record RoomView(String id,
                        RoomStatus status,

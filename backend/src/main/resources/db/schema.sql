@@ -4,6 +4,9 @@
 -- 이 파일이 유일한 DDL 원본이며 Hibernate 가 테이블을 만들지 않습니다.
 -- 여러 번 실행해도 됩니다 (CREATE TABLE IF NOT EXISTS, 시드는 upsert).
 --
+-- 이 파일은 「지금의 완성된 모습」입니다. 이미 만든 DB 에 컬럼을 더할 때는 CREATE TABLE IF NOT EXISTS 가
+-- 아무것도 하지 않으므로, db/migrations/ 의 파일을 날짜 순으로 한 번씩 적용합니다.
+--
 -- 시세(symbols / price_candles / collect_logs)는 M1, 사용자(users)는 M6,
 -- 시나리오(scenarios / scenario_symbols / news_events)는 M3,
 -- 게임 결과(game_rooms / game_participants / trades)는 M8 에서 만들었습니다.
@@ -169,7 +172,9 @@ CREATE TABLE IF NOT EXISTS game_rooms (
     scenario_id BIGINT        NOT NULL,
     mode        VARCHAR(10)   NOT NULL COMMENT 'DAILY | MINUTE',
     seed_money  DECIMAL(24,8) NOT NULL,
-    total_ticks INT           NOT NULL,
+    total_ticks INT           NOT NULL COMMENT '판 길이 (방에서 고른 값)',
+    period_start DATETIME     NOT NULL COMMENT 'KST. 실제로 쓴 첫 봉(0틱)',
+    period_end   DATETIME     NOT NULL COMMENT 'KST. 실제로 쓴 마지막 봉. 짧은 판이면 시나리오 끝보다 이르다',
     started_at  DATETIME      NOT NULL COMMENT 'KST',
     finished_at DATETIME      NOT NULL COMMENT 'KST',
     PRIMARY KEY (id),

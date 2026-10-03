@@ -40,8 +40,14 @@ public class ResultService {
         this.scenarios = scenarios;
     }
 
-    /** 결과 상세. 순위·수익률·체결 내역(시간 순)·청산 내역·실제 종목명 */
+    /**
+     * 결과 상세. 순위·수익률·체결 내역(시간 순)·청산 내역·실제 종목명.
+     *
+     * @param periodStart 실제로 쓴 시세 구간의 시작 (KST)
+     * @param periodEnd   실제로 쓴 시세 구간의 끝. 짧은 판이면 시나리오 기간보다 짧다
+     */
     public record GameRecord(long id, String roomCode, String mode, BigDecimal seedMoney, int totalTicks,
+                             LocalDateTime periodStart, LocalDateTime periodEnd,
                              LocalDateTime startedAt, LocalDateTime finishedAt, Scenario scenario,
                              List<Participant> participants, List<TradeRow> trades) {
     }
@@ -57,7 +63,7 @@ public class ResultService {
     }
 
     /** 전적 한 줄 */
-    public record HistoryEntry(long gameId, LocalDateTime finishedAt, String mode, String scenarioTitle,
+    public record HistoryEntry(long gameId, LocalDateTime finishedAt, String mode, int totalTicks, String scenarioTitle,
                                int rank, long playerCount, BigDecimal finalAsset, BigDecimal returnRate,
                                int liquidatedCount) {
     }
@@ -87,7 +93,8 @@ public class ResultService {
                     t.getPrice(), t.getMargin(), t.getLeverage(), t.getFee()));
         }
         return new GameRecord(room.getId(), room.getRoomCode(), room.getMode(), room.getSeedMoney(),
-                room.getTotalTicks(), room.getStartedAt(), room.getFinishedAt(), scenario,
+                room.getTotalTicks(), room.getPeriodStart(), room.getPeriodEnd(),
+                room.getStartedAt(), room.getFinishedAt(), scenario,
                 List.copyOf(list), List.copyOf(rows));
     }
 
@@ -98,7 +105,7 @@ public class ResultService {
         for (GameParticipantEntity p : participants.findByUserIdOrderByGameIdDesc(userId,
                 PageRequest.of(0, HISTORY_LIMIT))) {
             GameRoomEntity room = rooms.findById(p.getGameId()).orElseThrow();
-            list.add(new HistoryEntry(room.getId(), room.getFinishedAt(), room.getMode(),
+            list.add(new HistoryEntry(room.getId(), room.getFinishedAt(), room.getMode(), room.getTotalTicks(),
                     scenarios.get(room.getScenarioId()).title(), p.getFinalRank(),
                     participants.countByGameId(room.getId()), p.getFinalAsset(), p.getReturnRate(),
                     p.getLiquidatedCount()));

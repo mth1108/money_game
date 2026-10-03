@@ -52,7 +52,8 @@ public class GameRecordService implements GameRecorder {
         }
 
         GameRoomEntity room = rooms.save(new GameRoomEntity(game.roomCode(), game.scenario().id(),
-                game.mode().name(), game.seedMoney(), game.totalTicks(), game.startedAt(), game.finishedAt()));
+                game.mode().name(), game.seedMoney(), game.totalTicks(), game.periodStart(), game.periodEnd(),
+                game.startedAt(), game.finishedAt()));
 
         Map<String, GameResult.Rank> rankByPlayer = new HashMap<>();
         for (GameResult.Rank r : game.result().rankings()) {

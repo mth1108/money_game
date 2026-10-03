@@ -137,7 +137,7 @@ class ScenarioServiceIntegrationTest {
     @Test
     void 무작위_선택은_같은_단위의_시나리오_중에서_고른다() {
         register();
-        Scenario picked = service.pickRandom(Interval.ONE_DAY, new SplittableRandom(7)).orElseThrow();
+        Scenario picked = service.pickRandom(Interval.ONE_DAY, 241, new SplittableRandom(7)).orElseThrow();
         assertEquals(Interval.ONE_DAY, picked.interval());
     }
 

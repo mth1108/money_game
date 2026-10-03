@@ -8,6 +8,10 @@ import com.moneygame.scenario.LoadedScenario;
  */
 public interface ScenarioSource {
 
-    /** @param scenarioId null 이면 해당 모드의 시나리오 중 무작위 */
-    LoadedScenario load(GameMode mode, Long scenarioId);
+    /**
+     * @param scenarioId null 이면 해당 모드의 시나리오 중 무작위
+     * @param minBars    필요한 최소 봉 수 (= 판 길이 + 1). 무작위면 이만큼 있는 시나리오만 고르고,
+     *                   지정한 시나리오가 이보다 짧으면 예외다
+     */
+    LoadedScenario load(GameMode mode, Long scenarioId, int minBars);
 }

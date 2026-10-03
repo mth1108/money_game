@@ -34,7 +34,8 @@ class ResultControllerTest {
     void 결과_상세는_실제_종목명과_시간_순_체결을_담고_금액은_문자열이다() throws Exception {
         Scenario scenario = new Scenario(8, "개발용", Interval.ONE_DAY, LocalDateTime.of(2024, 5, 9, 0, 0),
                 LocalDateTime.of(2025, 5, 8, 0, 0), 241, List.of(new Scenario.ScenarioSymbol("A", "005930", "삼성전자")));
-        when(results.get(1)).thenReturn(new ResultService.GameRecord(1, "ab12cd34", "DAILY", new BigDecimal("100000000"), 240,
+        when(results.get(1)).thenReturn(new ResultService.GameRecord(1, "ab12cd34", "DAILY", new BigDecimal("100000000"), 60,
+                LocalDateTime.of(2024, 5, 9, 0, 0), LocalDateTime.of(2024, 8, 5, 0, 0),
                 LocalDateTime.of(2026, 10, 3, 9, 0), LocalDateTime.of(2026, 10, 3, 9, 4), scenario,
                 List.of(new ResultService.Participant("7", 7L, "철수", false, 1, new BigDecimal("69781505.88333333"),
                         new BigDecimal("-0.3022"), 1, 1)),
@@ -53,7 +54,7 @@ class ResultControllerTest {
     @Test
     void 전적은_최근_판부터() throws Exception {
         when(results.history(7)).thenReturn(List.of(
-                new ResultService.HistoryEntry(12, LocalDateTime.of(2026, 10, 3, 9, 4), "DAILY", "개발용", 2, 2,
+                new ResultService.HistoryEntry(12, LocalDateTime.of(2026, 10, 3, 9, 4), "DAILY", 60, "개발용", 2, 2,
                         new BigDecimal("69781505.88333333"), new BigDecimal("-0.3022"), 1)));
 
         mvc.perform(get("/api/users/7/results"))

@@ -7,6 +7,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
@@ -31,6 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** M6 REST. 서비스는 가짜로 두고 요청·응답 형식과 오류 매핑만 본다. */
 @WebMvcTest({RoomController.class, UserController.class})
 @Import(JsonConfig.class)
+@EnableConfigurationProperties(RoomProperties.class)   // 슬라이스 테스트는 설정 빈을 자동 등록하지 않는다. application.yml 의 room.* 를 쓴다
 @DisplayName("M6 방 REST")
 class RoomControllerTest {
 
@@ -99,6 +101,38 @@ class RoomControllerTest {
         mvc.perform(post("/api/rooms").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"userId\":7,\"mode\":\"DAILY\",\"maxPlayers\":4,\"bots\":4}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 방_설정_선택지를_내려준다() throws Exception {
+        mvc.perform(get("/api/rooms/options"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.allowedTicks[0]").value(60))
+                .andExpect(jsonPath("$.allowedTicks[2]").value(240))
+                .andExpect(jsonPath("$.defaultTicks").value(240))
+                .andExpect(jsonPath("$.modes[0].mode").value("DAILY"))
+                .andExpect(jsonPath("$.modes[0].leverages[2]").value(3))
+                .andExpect(jsonPath("$.modes[1].leverages[3]").value(10))
+                .andExpect(jsonPath("$.maxBots").value(3))
+                .andExpect(jsonPath("$.defaultSeedMoney").value("100000000"));
+    }
+
+    @Test
+    void 판_길이를_보내면_방_설정에_들어가고_비우면_기본값이다() throws Exception {
+        when(users.get(7)).thenReturn(new UserService.User(7, "철수"));
+        when(rooms.create(eq("7"), eq("철수"), any())).thenReturn(waiting("r1"));
+        ArgumentCaptor<RoomSettings> captor = ArgumentCaptor.forClass(RoomSettings.class);
+
+        mvc.perform(post("/api/rooms").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":7,\"mode\":\"DAILY\",\"ticks\":60}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/rooms").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"userId\":7,\"mode\":\"DAILY\"}"))
+                .andExpect(status().isOk());
+
+        verify(rooms, times(2)).create(eq("7"), eq("철수"), captor.capture());
+        assertEquals(60, captor.getAllValues().get(0).ticks());
+        assertEquals(240, captor.getAllValues().get(1).ticks(), "room.default-ticks");
     }
 
     @Test

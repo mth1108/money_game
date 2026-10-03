@@ -23,18 +23,27 @@ public class RoomController {
 
     private final RoomService rooms;
     private final UserService users;
+    private final RoomProperties properties;
 
-    public RoomController(RoomService rooms, UserService users) {
+    public RoomController(RoomService rooms, UserService users, RoomProperties properties) {
         this.rooms = rooms;
         this.users = users;
+        this.properties = properties;
     }
 
     /**
      * @param seedMoney 선택. 비우면 1억 원. 정밀도를 지키려면 문자열로 보낸다 (§1.5)
      * @param bots      선택. 존버 봇 수 0 ~ 3, 비우면 0 (M9)
+     * @param ticks     선택. 판 길이(틱). GET /api/rooms/options 의 allowedTicks 중 하나, 비우면 기본값
      */
     public record CreateRequest(Long userId, GameMode mode, Integer maxPlayers, Long scenarioId, BigDecimal seedMoney,
-                                Integer bots) {
+                                Integer bots, Integer ticks) {
+    }
+
+    /** 방 만들기 화면이 고를 수 있는 값 (모드별 배율, 판 길이, 인원·봇 한도, 기본 시드머니). */
+    @GetMapping("/options")
+    public RoomOptions options() {
+        return RoomOptions.of(properties);
     }
 
     public record UserRequest(Long userId) {
@@ -53,7 +62,7 @@ public class RoomController {
         UserService.User user = user(request.userId());
         return rooms.create(user.userId(), user.nickname(),
                 RoomSettings.of(request.mode(), request.maxPlayers(), request.scenarioId(), request.seedMoney(),
-                        request.bots()));
+                        request.bots(), request.ticks(), properties.defaultTicks()));
     }
 
     @GetMapping("/{roomId}")

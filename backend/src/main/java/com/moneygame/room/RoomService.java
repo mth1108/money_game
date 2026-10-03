@@ -6,6 +6,7 @@ import com.moneygame.engine.GameSession;
 import com.moneygame.engine.OrderRequest;
 import com.moneygame.engine.OrderResult;
 import com.moneygame.engine.TickResult;
+import com.moneygame.marketdata.Candle;
 import com.moneygame.position.PlayerState;
 import com.moneygame.scenario.LoadedScenario;
 import jakarta.annotation.PreDestroy;
@@ -79,6 +80,9 @@ public class RoomService {
 
     /** 방을 만들고 만든 사람이 바로 들어간다. */
     public RoomView create(String hostUserId, String hostNickname, RoomSettings settings) {
+        if (!properties.allowedTicks().contains(settings.ticks())) {
+            throw new IllegalArgumentException("판 길이는 " + properties.allowedTicks() + " 틱 중에서 고릅니다: " + settings.ticks());
+        }
         Room room = newRoom(settings);
         RoomView view = call(room, () -> {
             room.participants.put(hostUserId, new Room.Participant(hostUserId, hostNickname));
@@ -89,8 +93,9 @@ public class RoomService {
             }
             return changed(room);
         });
-        log.info("방 생성 {} — {} / 최대 {}명 / 봇 {} / 시나리오 {} / 시드 {} / 방장 {}", room.id, settings.mode(),
-                settings.maxPlayers(), settings.bots(), settings.scenarioId() == null ? "무작위" : settings.scenarioId(),
+        log.info("방 생성 {} — {} / {}틱 / 최대 {}명 / 봇 {} / 시나리오 {} / 시드 {} / 방장 {}", room.id, settings.mode(),
+                settings.ticks(), settings.maxPlayers(), settings.bots(),
+                settings.scenarioId() == null ? "무작위" : settings.scenarioId(),
                 settings.seedMoney().toPlainString(), hostNickname);
         return view;
     }
@@ -228,8 +233,13 @@ public class RoomService {
     // ─────────────────────── executor 스레드 안에서만 ───────────────────────
 
     private void start(Room room) {
-        LoadedScenario loaded = scenarios.load(room.settings.mode(), room.settings.scenarioId());
-        int totalTicks = loaded.scenario().barCount() - 1;
+        // 판 길이만큼만 쓴다 — 시나리오의 앞 「틱 + 1」 봉. 엔진은 남는 봉을 쓰지 않는다
+        int totalTicks = room.settings.ticks();
+        LoadedScenario loaded = scenarios.load(room.settings.mode(), room.settings.scenarioId(), totalTicks + 1);
+        if (loaded.scenario().barCount() < totalTicks + 1) {
+            throw new IllegalStateException("시나리오 " + loaded.scenario().id() + " 는 " + loaded.scenario().barCount()
+                    + "봉이라 " + totalTicks + "틱 판을 돌 수 없습니다");
+        }
         GameSession session = new GameSession(loaded.scenario().labels(), loaded.closeSeries(),
                 room.settings.seedMoney(), room.settings.mode().leverages(), totalTicks, loaded.newsByTick());
         for (Room.Participant p : room.participants.values()) {
@@ -306,9 +316,13 @@ public class RoomService {
             // 봇은 사용자 ID 없이 봇으로 표시한다 (2026-10-03 결정)
             players.add(new FinishedGame.Player(p.userId, p.isBot() ? null : Long.valueOf(p.userId), p.nickname, p.isBot()));
         }
+        // 실제로 쓴 시세 구간 — 짧은 판은 시나리오 앞부분만 쓰므로 시나리오 기간과 다르다
+        List<Candle> used = room.scenario.candlesByLabel().values().iterator().next();
+        LocalDateTime periodStart = used.get(0).timestamp().atZoneSameInstant(KST).toLocalDateTime();
+        LocalDateTime periodEnd = used.get(room.session.totalTicks()).timestamp().atZoneSameInstant(KST).toLocalDateTime();
         FinishedGame game = new FinishedGame(room.id, room.settings.mode(), room.settings.seedMoney(),
-                room.session.totalTicks(), room.scenario.scenario(), room.startedAt, LocalDateTime.now(KST),
-                List.copyOf(players), room.result);
+                room.session.totalTicks(), room.scenario.scenario(), periodStart, periodEnd,
+                room.startedAt, LocalDateTime.now(KST), List.copyOf(players), room.result);
         try {
             return recorder.record(game);
         } catch (RuntimeException e) {

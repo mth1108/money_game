@@ -69,9 +69,12 @@ export function ResultView({ resultId, myUserId }: { resultId: number; myUserId:
   return (
     <div>
       <h4>
-        결과 #{record.id} · 시나리오 「{record.scenario.title}」 ({record.scenario.start} ~ {record.scenario.end}) · {record.mode} · 시드{' '}
-        {record.seedMoney}
+        결과 #{record.id} · 시나리오 「{record.scenario.title}」 · {record.mode} · {record.totalTicks}틱 · 시드 {record.seedMoney}
       </h4>
+      <p>
+        실제로 쓴 기간: {record.periodStart} ~ {record.periodEnd}
+        {record.periodEnd !== record.scenario.end && ` (시나리오 전체는 ${record.scenario.start} ~ ${record.scenario.end})`}
+      </p>
       <p>
         실제 종목:{' '}
         {record.scenario.symbols.map((s) => `${s.label} = ${s.name}(${s.code})`).join(', ')}
