@@ -1,0 +1,36 @@
+# 발표 자료
+
+프로젝트 진행을 세 번에 나눠 발표합니다 (CLAUDE.md §10 F). 결과물은 **PowerPoint(.pptx)** 입니다 —
+Windows · Mac PowerPoint, Keynote, 구글 슬라이드에서 열립니다. Mac 전용 형식(.key)은 쓰지 않습니다.
+
+| # | 제목 | 범위 | 파일 |
+|---|---|---|---|
+| 1 | 실제 시세를 게임 재료로 만들기 | 기획, S0 ~ S1, M1 · M2 · M3 | `01-data/moneygame-talk1-data.pptx` (15장, 발표자 노트 포함) |
+| 2 | 정확하고 공정하게 돌아가는 게임 서버 | S2 ~ S5, M4 · M5 · M6 · M7 · M8, P0 | 아직 |
+| 3 | 플레이해보고 고친 것들 | S6 ~ 현재 + S7 계획, M9, P1, 운영 | 아직 |
+
+## 구성
+
+- `common/deck-kit.js` — 세 발표가 같이 쓰는 테마(게임 화면과 같은 색), 레이아웃, 아이콘, 조각
+- `NN-*/build.js` — 발표별 슬라이드. 숫자와 사실은 CLAUDE.md 에서 가져왔다. 바꿀 때는 그쪽부터 확인한다
+
+## 만들 때 정한 것
+
+- **글꼴은 맑은 고딕(Malgun Gothic)** — Windows 기본 글꼴. Mac 에 없으면 비슷한 한글 글꼴로 대체된다. Mac 전용 글꼴은 쓰지 않는다
+- **그래프는 도형으로 그린다** — pptxgenjs 가 만든 차트는 Keynote 에서 빈 칸으로 나온다 (2026-10-10 확인).
+  막대 · 숫자를 도형으로 그려 PowerPoint · Keynote · 구글 슬라이드에서 똑같이 보이게 했다. 값을 바꾸려면 build.js 를 고친다
+- 상승 빨강 · 하락 파랑 (국내 관례), 브랜드 보라 — 게임 화면(P1)과 같다
+
+## 다시 만들기
+
+빌드 도구는 **프로젝트 의존성이 아닙니다** (CLAUDE.md §1.7). 저장소 밖의 임시 폴더에 설치해 씁니다.
+
+```
+mkdir -p /tmp/deck-tools && cd /tmp/deck-tools
+npm init -y && npm install pptxgenjs react-icons react react-dom sharp
+cd ~/dev/moneyGame
+NODE_PATH=/tmp/deck-tools/node_modules node presentations/01-data/build.js
+```
+
+- 확인은 Keynote 로 슬라이드 이미지를 뽑아 눈으로 본다 (저장하지 않고 닫는다). 처음 한 번은 macOS 가
+  「Keynote 제어」 허용을 묻는다
