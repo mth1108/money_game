@@ -66,7 +66,8 @@ logging:
     com.moneygame: INFO
 
 ---
-# 임시 공개 — Cloudflare 임시 터널로 밖에서 접속하게 한다 (CLAUDE.md §4, §9-12). scripts/share.sh 가 켠다
+# 임시 공개 — 다른 사람이 이 맥의 게임에 접속하게 한다 (CLAUDE.md §4, §9-12). scripts/share.sh 가 켠다
+#   Cloudflare 임시 터널(기본) 또는 이 맥의 IP 주소(--lan)
 spring:
   config:
     activate:
@@ -79,6 +80,8 @@ realtime:
     - http://localhost:*
     - http://127.0.0.1:*
     - https://*.trycloudflare.com
+    # IP 주소로 접속 (share.sh --lan) — http://<이 맥의 IP>:4173. IP 는 네트워크마다 바뀌어 포트로만 맞춘다
+    - http://*:4173
 
 ---
 # 배치형 실행 — 시세 수집(collector), 시나리오 관리(scenario).

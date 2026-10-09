@@ -13,7 +13,8 @@ export default defineConfig({
     },
   },
   // 임시 공개 (CLAUDE.md §4). 빌드 결과(dist)만 내보내고 프록시는 server.proxy 를 그대로 쓴다.
-  // 개발 서버는 소스를 내보내므로 터널에 물리지 않는다
+  // 개발 서버는 소스를 내보내므로 터널에 물리지 않는다.
+  // IP 주소로 접속(share.sh --lan)할 때는 --host 0.0.0.0 으로 띄운다. IP 주소는 Vite 가 allowedHosts 없이도 받는다
   preview: {
     port: 4173,
     strictPort: true,
