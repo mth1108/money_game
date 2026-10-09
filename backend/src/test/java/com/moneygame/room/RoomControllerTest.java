@@ -46,13 +46,24 @@ class RoomControllerTest {
     }
 
     @Test
-    void 닉네임으로_입장하면_사용자_ID_를_돌려준다() throws Exception {
-        when(users.registerOrGet("철수")).thenReturn(new UserService.User(7, "철수"));
+    void 닉네임으로_입장하면_사용자_ID_와_새_토큰을_돌려준다() throws Exception {
+        when(users.enter("철수", null)).thenReturn(new UserService.Entered(new UserService.User(7, "철수"), "새토큰"));
 
         mvc.perform(post("/api/users").contentType(MediaType.APPLICATION_JSON).content("{\"nickname\":\"철수\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(7))
-                .andExpect(jsonPath("$.nickname").value("철수"));
+                .andExpect(jsonPath("$.nickname").value("철수"))
+                .andExpect(jsonPath("$.token").value("새토큰"));
+    }
+
+    @Test
+    void 토큰이_맞지_않는_닉네임은_409() throws Exception {
+        when(users.enter("철수", "남의토큰")).thenThrow(new IllegalStateException("이미 사용 중인 닉네임입니다"));
+
+        mvc.perform(post("/api/users").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"철수\",\"token\":\"남의토큰\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("이미 사용 중인 닉네임입니다"));
     }
 
     @Test

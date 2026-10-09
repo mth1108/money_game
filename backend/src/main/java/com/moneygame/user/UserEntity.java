@@ -21,18 +21,24 @@ public class UserEntity {
     @Column(name = "nickname", nullable = false, length = 20)
     private String nickname;
 
+    /** 브라우저 토큰의 SHA-256 (hex). null 이면 아직 어느 브라우저도 가져가지 않은 닉네임 (2026-10-09 이전 가입) */
+    @Column(name = "token_hash", length = 64)
+    private String tokenHash;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
     protected UserEntity() {
     }
 
-    public UserEntity(String nickname, LocalDateTime createdAt) {
+    public UserEntity(String nickname, String tokenHash, LocalDateTime createdAt) {
         this.nickname = nickname;
+        this.tokenHash = tokenHash;
         this.createdAt = createdAt;
     }
 
     public Long getId() { return id; }
     public String getNickname() { return nickname; }
+    public String getTokenHash() { return tokenHash; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

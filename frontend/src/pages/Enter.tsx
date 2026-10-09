@@ -52,7 +52,9 @@ export function Enter({ onEnter }: { onEnter: (user: User) => void }) {
       </div>
       <form onSubmit={submit} className="self-center rounded-2xl border border-line bg-panel p-6">
         <h2 className="text-lg font-bold">닉네임으로 시작하기</h2>
-        <p className="mt-1 text-sm text-muted">같은 닉네임으로 들어오면 전적이 이어집니다.</p>
+        <p className="mt-1 text-sm text-muted">
+          닉네임은 처음 만든 브라우저에서만 쓸 수 있습니다. 같은 브라우저로 다시 오면 전적이 이어집니다.
+        </p>
         <input
           className={`${inputClass} mt-5 py-3 text-base`}
           value={nickname}

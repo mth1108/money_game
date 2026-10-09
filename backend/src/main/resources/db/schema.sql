@@ -95,11 +95,13 @@ CREATE TABLE IF NOT EXISTS collect_logs (
 --
 -- 닉네임 = 사용자 (2026-10-02 결정). 처음 쓰는 닉네임이면 여기 등록하고, 같은 닉네임은 같은
 -- 사용자로 봅니다. 비밀번호는 없습니다. 쓰기는 가입(닉네임 첫 사용) 순간뿐입니다 (§5).
+-- 닉네임은 처음 만든 브라우저에 묶입니다 (2026-10-09). 브라우저가 가진 토큰의 해시만 둡니다.
 -- 게임 중 상태(현금·포지션)는 담지 않습니다 (§1.3).
 -- ────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS users (
     id         BIGINT      NOT NULL AUTO_INCREMENT,
     nickname   VARCHAR(20) NOT NULL,
+    token_hash VARCHAR(64) NULL COMMENT '브라우저 토큰의 SHA-256 (hex). NULL 이면 아직 어느 브라우저도 가져가지 않았다',
     created_at DATETIME    NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uk_users_nickname (nickname)

@@ -39,3 +39,32 @@ export function loadRoomId(): string | null {
 export function saveRoomId(roomId: string | null): void {
   write(ROOM_KEY, roomId)
 }
+
+// ── 닉네임 토큰 (2026-10-09) ──
+// 닉네임은 처음 만든 브라우저에 묶인다. 서버가 준 토큰을 닉네임별로 localStorage 에 둔다 —
+// 탭과 상관없이 이 브라우저라면 같은 닉네임으로 다시 들어올 수 있다. 서버는 대소문자를 구분하지 않으므로 소문자로 찾는다.
+// 지우면 그 닉네임은 다시 쓸 수 없다 (CLAUDE.md §9-14).
+
+const TOKENS_KEY = 'moneygame.tokens'
+
+function readTokens(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(TOKENS_KEY) ?? '{}') as Record<string, string>
+  } catch {
+    return {}
+  }
+}
+
+const tokenKey = (nickname: string) => nickname.trim().toLowerCase()
+
+export function loadToken(nickname: string): string | undefined {
+  return readTokens()[tokenKey(nickname)]
+}
+
+export function saveToken(nickname: string, token: string): void {
+  try {
+    localStorage.setItem(TOKENS_KEY, JSON.stringify({ ...readTokens(), [tokenKey(nickname)]: token }))
+  } catch {
+    // 저장하지 못하면 이 닉네임은 이번에만 쓸 수 있다
+  }
+}

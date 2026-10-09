@@ -1,6 +1,7 @@
 // REST 호출 (CLAUDE.md §3 M6). 오류 응답은 {"error": "사유"} 다.
 // axios 를 쓴다 (2026-10-03). 금액은 서버가 문자열로 보내므로 JSON 파싱에서 정밀도가 깨지지 않는다 (§1.5).
 import axios, { type Method } from 'axios'
+import { loadToken, saveToken } from '../session'
 import type { GameMode, GameRecord, HistoryEntry, RoomOptions, RoomView, User } from './types'
 
 export class ApiError extends Error {
@@ -32,7 +33,18 @@ async function request<T>(method: Method, path: string, body?: unknown): Promise
 }
 
 export const api = {
-  enter: (nickname: string) => request<User>('POST', '/api/users', { nickname }),
+  /**
+   * 닉네임으로 입장한다. 이 브라우저가 그 닉네임의 토큰을 갖고 있으면 함께 보내고,
+   * 새로 발급받으면 저장한다. 남의 닉네임이면 409 「이미 사용 중인 닉네임」 (2026-10-09)
+   */
+  enter: async (nickname: string): Promise<User> => {
+    const res = await request<User & { token: string | null }>('POST', '/api/users', {
+      nickname,
+      token: loadToken(nickname),
+    })
+    if (res.token) saveToken(res.nickname, res.token)
+    return { id: res.id, nickname: res.nickname }
+  },
 
   listRooms: () => request<RoomView[]>('GET', '/api/rooms'),
 
