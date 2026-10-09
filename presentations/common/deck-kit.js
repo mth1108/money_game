@@ -50,6 +50,8 @@ function newDeck({ title, subject, footer }) {
       { placeholder: { options: { name: "kicker", type: "body", x: M, y: 1.35, w: 6.2, h: 0.4, fontSize: 14, bold: true, color: C.accent1, align: "left", margin: 0 }, text: "" } },
       { placeholder: { options: { name: "title", type: "title", x: M, y: 1.8, w: 6.4, h: 1.5, fontSize: 40, bold: true, color: C.background1, align: "left", valign: "top", margin: 0 }, text: "" } },
       { placeholder: { options: { name: "body", type: "body", x: M, y: 3.45, w: 6.2, h: 0.9, fontSize: 16, color: C.background2, align: "left", valign: "top", margin: 0 }, text: "" } },
+      // 발표자 이름 자리 — 비워 두면 편집 화면에만 안내 문구가 보이고, 슬라이드 쇼에는 나오지 않는다
+      { placeholder: { options: { name: "presenter", type: "body", x: M, y: 4.55, w: 4.0, h: 0.4, fontSize: 15, bold: true, color: C.background1, align: "left", valign: "middle", margin: 0 }, text: "발표자 이름" } },
     ],
   });
 
